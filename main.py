@@ -33,7 +33,12 @@ def save_vocabulary(vocabulary_counter: dict, vocabulary_file_path: str):
         for stem, count in vocabulary_counter.items(): vocab_file.write(f'{stem},{count}\n')
 
 
-def process_dataset(raw_dataset_file_path: str, processed_dataset_file_path: str, vocabulary_file_path: str, min_stem_occurrence: int):
+def process_dataset(
+        raw_dataset_file_path: str,
+        processed_dataset_file_path: str,
+        vectorised_matrix_file_path: str,
+        vocabulary_file_path: str,
+        min_stem_occurrence: int):
     # covert to set the stopwords to remove from tokens
     stopwords_set = set(stopwords.words('english'))
     vocab_counter = Counter()
@@ -50,35 +55,52 @@ def process_dataset(raw_dataset_file_path: str, processed_dataset_file_path: str
     # filter out words that occur fewer than two times in the vocabulary
     print(type(df['tokens']))
     # vocab_counter_reduced is alphabetically ordered and will be used as to vectorise samples
-    vocab_counter_reduced = {stem: stem for stem, count in sorted(vocab_counter.items()) if count >= min_stem_occurrence}
+    vocab_counter_reduced = {stem: count for stem, count in sorted(vocab_counter.items()) if
+                             count >= min_stem_occurrence}
     df['tokens'] = df['tokens'].apply(lambda x: filter_min_occurrence_stems(x, vocab_counter_reduced))
     # move the tokens column 2 (after the raw text)
     tokens_col = df.pop('tokens')
     df.insert(2, 'tokens', tokens_col)
-    df['vectors'] = df['tokens'].apply(lambda x: vectorise(x, vocab_counter_reduced))
+    vectorised_matrix = create_vectorised_matrix(df, vocab_counter_reduced)
 
+    profane_samples_count = 0
+    for row in vectorised_matrix:
+        if row[0] == 1:
+            profane_samples_count += 1
+    print('Profane samples count: {}'.format(profane_samples_count))
     winsound.Beep(440, 1000)
     # save
     df.to_csv(processed_dataset_file_path)
+    np.save(vectorised_matrix_file_path, vectorised_matrix)
     save_vocabulary(vocab_counter_reduced, vocabulary_file_path)
-    winsound.Beep(340, 5000)
+    winsound.Beep(340, 3000)
 
 
-def vectorise(stems: list, vocab_counter_reduced: dict):
-    vector = np.array()
-    stems_set_per_sample = set(stems)
-    for stem, count in vocab_counter_reduced.items():
-        vector.append(1 if stem in stems_set_per_sample else 0)
-    return vector
+def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, classification_column: pd.Series,
+              tokens_column: pd.Series):
+    stems_set_per_sample = set(tokens_column.values[sample_index])
+    # assign class
+    row[0] = classification_column.values[sample_index]
+    # create vector
+    for stem_index, stem in enumerate(vocab_counter_reduced.items()):
+        row[stem_index + 1] = (1 if stem in stems_set_per_sample else 0)
+
 
 def create_vectorised_matrix(dataframe: pd.DataFrame, vocab_counter_reduced: dict):
+    classification_column = dataframe['profanity']
+    tokens_column = dataframe['tokens']
     matrix = np.zeros(shape=(dataframe.shape[0], len(vocab_counter_reduced.items()) + 1))
-    for index, val in np.ndenumerate(matrix):
-        if (index[1] == 0):
-            matrix[index[0], index[1]] = dataframe['profanity'][index[0]]
-        else:
+    for sample_index, row in enumerate(matrix):
+        vectorise(sample_index, row, vocab_counter_reduced, classification_column, tokens_column)
 
     return matrix
 
+
 if __name__ == '__main__':
-    process_dataset('test/train_test.csv', 'test/clean_test.scv', 'test/vocabulary_test.txt', 3)
+    root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
+    process_dataset(
+        root_path + 'train_test.csv',
+        root_path + 'clean_test.csv',
+        root_path + 'vectorised_matrix.npy',
+        root_path + 'vocabulary_test.csv',
+        3)
