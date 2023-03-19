@@ -83,7 +83,7 @@ def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, c
     row[0] = classification_column.values[sample_index]
     # create vector
     for stem_index, stem in enumerate(vocab_counter_reduced.items()):
-        row[stem_index + 1] = (1 if stem in stems_set_per_sample else 0)
+        row[stem_index + 1] = (1 if stem[0] in stems_set_per_sample else 0)
 
 
 def create_vectorised_matrix(dataframe: pd.DataFrame, vocab_counter_reduced: dict):
