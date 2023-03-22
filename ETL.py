@@ -64,9 +64,9 @@ def process_dataset(
     df.insert(2, 'tokens', tokens_col)
 
     # calculate the num of samples each term appears in (needed for TF-IDF)
-    term_to_sample_count = dict()
+    token_to_sample_count = dict()
     for stem in vocab_counter_reduced.items():
-
+        token_to_sample_count[stem] = df['tokens'].expanding().apply
 
 
     vectorised_matrix = create_vectorised_matrix(df, vocab_counter_reduced)
