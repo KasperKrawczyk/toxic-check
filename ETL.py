@@ -78,12 +78,19 @@ def process_dataset(
 
 def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, classification_column: pd.Series,
               tokens_column: pd.Series):
-    stems_set_per_sample = set(tokens_column.values[sample_index])
+    sample_tokens = tokens_column.values[sample_index]
+    stems_set_per_sample = set(sample_tokens)
+
+    sample_frequencies = dict()
+    # get DF
+    for token in sample_tokens:
+        sample_frequencies[token] += 1
+
     # assign class
     row[0] = classification_column.values[sample_index]
     # create vector
     for stem_index, stem in enumerate(vocab_counter_reduced.items()):
-        row[stem_index + 1] = (1 if stem[0] in stems_set_per_sample else 0)
+        row[stem_index + 1] = (1 if stem in stems_set_per_sample else 0)
 
 
 def create_vectorised_matrix(dataframe: pd.DataFrame, vocab_counter_reduced: dict):
