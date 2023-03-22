@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 import numpy as np
 from nltk.corpus import stopwords
@@ -61,6 +62,13 @@ def process_dataset(
     # move the tokens column 2 (after the raw text)
     tokens_col = df.pop('tokens')
     df.insert(2, 'tokens', tokens_col)
+
+    # calculate the num of samples each term appears in (needed for TF-IDF)
+    term_to_sample_count = dict()
+    for stem in vocab_counter_reduced.items():
+
+
+
     vectorised_matrix = create_vectorised_matrix(df, vocab_counter_reduced)
 
     profane_samples_count = 0
@@ -76,21 +84,29 @@ def process_dataset(
     winsound.Beep(340, 3000)
 
 
-def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, classification_column: pd.Series,
+def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, term_to_sample_count: dict, classification_column: pd.Series,
               tokens_column: pd.Series):
     sample_tokens = tokens_column.values[sample_index]
-    stems_set_per_sample = set(sample_tokens)
+    num_of_tokens_in_sample = len(sample_tokens)
+    num_of_samples = classification_column.size
 
     sample_frequencies = dict()
-    # get DF
+    # get TF (term frequency)
     for token in sample_tokens:
         sample_frequencies[token] += 1
+    tf_scores = {token: (frequency / num_of_tokens_in_sample) for token, frequency in sample_frequencies.items()}
+
+    # get IDF (inverse document frequency)
+    idf_scores = {token: math.log(num_of_samples / term_to_sample_count[token]) for token in sample_tokens}
+
+    # get TF-IDF
+    tf_idf_scores = {token: (tf_scores[token] * idf_scores[token]) for token in sample_tokens}
 
     # assign class
     row[0] = classification_column.values[sample_index]
     # create vector
     for stem_index, stem in enumerate(vocab_counter_reduced.items()):
-        row[stem_index + 1] = (1 if stem in stems_set_per_sample else 0)
+        row[stem_index + 1] = tf_idf_scores.get(stem, 0)
 
 
 def create_vectorised_matrix(dataframe: pd.DataFrame, vocab_counter_reduced: dict):
