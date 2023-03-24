@@ -4,7 +4,7 @@ import numpy as np
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem.porter import PorterStemmer
-from collections import Counter
+from collections import Counter, defaultdict
 import string
 import winsound
 
@@ -29,6 +29,12 @@ def filter_min_occurrence_stems(stems: list, vocab_counter: dict):
     return [stem for stem in stems if vocab_counter.get(stem) is not None]
 
 
+def count_num_of_samples_with_term(token_list: list, token_to_sample_count: dict, vocab_counter_reduced: dict):
+    for token in token_list:
+        if token in vocab_counter_reduced:
+            token_to_sample_count[token] += 1
+
+
 def save_vocabulary(vocabulary_counter: dict, vocabulary_file_path: str):
     with open(vocabulary_file_path, 'w', encoding='utf-8') as vocab_file:
         for stem, count in vocabulary_counter.items(): vocab_file.write(f'{stem},{count}\n')
@@ -39,17 +45,22 @@ def process_dataset(
         processed_dataset_file_path: str,
         vectorised_matrix_file_path: str,
         vocabulary_file_path: str,
-        min_stem_occurrence: int):
+        min_stem_occurrence: int,
+        raw_data_first_n_rows: int,
+        limit_nrows: bool = False):
     # covert to set the stopwords to remove from tokens
     stopwords_set = set(stopwords.words('english'))
     vocab_counter = Counter()
     porter_stemmer = PorterStemmer()
 
-    df = pd.read_csv(raw_dataset_file_path)
+    if limit_nrows:
+        df = pd.read_csv(raw_dataset_file_path, nrows=raw_data_first_n_rows)
+    else:
+        df = pd.read_csv(raw_dataset_file_path)
 
     # a sample is classified as 'profanity' if any of the other classes is non-zero
     df['profanity'] = np.where(df.iloc[:, 2:].sum(axis=1) > 0, 1, 0)
-    winsound.Beep(560, 1000)
+    # winsound.Beep(560, 1000)
     # extract tokens
     df['tokens'] = df.apply(
         lambda x: process_sample_text(x['comment_text'], stopwords_set, porter_stemmer, vocab_counter), axis=1)
@@ -64,33 +75,32 @@ def process_dataset(
     df.insert(2, 'tokens', tokens_col)
 
     # calculate the num of samples each term appears in (needed for TF-IDF)
-    token_to_sample_count = dict()
-    for stem in vocab_counter_reduced.items():
-        token_to_sample_count[stem] = df['tokens'].expanding().apply
+    term_to_sample_count = defaultdict(int)
+    df['tokens'].apply(lambda x: count_num_of_samples_with_term(x, term_to_sample_count, vocab_counter_reduced))
 
-
-    vectorised_matrix = create_vectorised_matrix(df, vocab_counter_reduced)
+    vectorised_matrix = create_vectorised_matrix(df, vocab_counter_reduced, term_to_sample_count)
 
     profane_samples_count = 0
     for row in vectorised_matrix:
         if row[0] == 1:
             profane_samples_count += 1
     print('Profane samples count: {}'.format(profane_samples_count))
-    winsound.Beep(440, 1000)
+    # winsound.Beep(440, 1000)
     # save
     df.to_csv(processed_dataset_file_path)
     np.save(vectorised_matrix_file_path, vectorised_matrix)
     save_vocabulary(vocab_counter_reduced, vocabulary_file_path)
-    winsound.Beep(340, 3000)
+    # winsound.Beep(340, 3000)
 
 
-def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, term_to_sample_count: dict, classification_column: pd.Series,
+def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, term_to_sample_count: dict,
+              classification_column: pd.Series,
               tokens_column: pd.Series):
     sample_tokens = tokens_column.values[sample_index]
     num_of_tokens_in_sample = len(sample_tokens)
     num_of_samples = classification_column.size
 
-    sample_frequencies = dict()
+    sample_frequencies = defaultdict(int)
     # get TF (term frequency)
     for token in sample_tokens:
         sample_frequencies[token] += 1
@@ -105,16 +115,23 @@ def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, t
     # assign class
     row[0] = classification_column.values[sample_index]
     # create vector
+    row_sum = 0
     for stem_index, stem in enumerate(vocab_counter_reduced.items()):
-        row[stem_index + 1] = tf_idf_scores.get(stem, 0)
+        score = tf_idf_scores.get(stem, 0)
+        row[stem_index + 1] = score
+        row_sum += score
+    # normalise
+    if row_sum > 0:
+        for i in range(1, len(row) - 1):
+            row[i] = row[i] / row_sum
 
 
-def create_vectorised_matrix(dataframe: pd.DataFrame, vocab_counter_reduced: dict):
+def create_vectorised_matrix(dataframe: pd.DataFrame, vocab_counter_reduced: dict, term_to_sample_count: dict):
     classification_column = dataframe['profanity']
     tokens_column = dataframe['tokens']
     matrix = np.zeros(shape=(dataframe.shape[0], len(vocab_counter_reduced.items()) + 1))
     for sample_index, row in enumerate(matrix):
-        vectorise(sample_index, row, vocab_counter_reduced, classification_column, tokens_column)
+        vectorise(sample_index, row, vocab_counter_reduced, term_to_sample_count, classification_column, tokens_column)
 
     return matrix
 
@@ -123,7 +140,8 @@ if __name__ == '__main__':
     root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
     process_dataset(
         root_path + 'train_test.csv',
-        root_path + 'clean_test.csv',
+        root_path + 'clean_full.csv',
         root_path + 'vectorised_matrix.npy',
-        root_path + 'vocabulary_test.csv',
-        3)
+        root_path + 'vocabulary_full.csv',
+        3,
+        0)
