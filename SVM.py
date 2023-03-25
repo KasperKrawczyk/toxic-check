@@ -1,6 +1,7 @@
 import numpy.random
 import pandas as pd
 import numpy as np
+import sklearn.utils
 
 import ETL
 
@@ -20,8 +21,12 @@ class SVM:
         self.num_train_samples = None
         self.num_test_samples = None
 
+        # slice input so that data doesn't include the classification column
         self.data = input_data[:, class_col_ind + 1:]
-        self.num_samples, self.dimensions = self.data.shape
+        # add the intercept term (bias) as last column, filled with 1s
+        self.data = np.c_[self.data, np.ones(self.data.shape[0])]
+        # shape should return a 2-tuple
+        self.num_samples, self.num_features = self.data.shape
         self.class_col_ind = class_col_ind
         self.class_col = input_data[:, class_col_ind]
         self.learn_rate = learn_rate
@@ -29,8 +34,7 @@ class SVM:
         self.c = SVM.c_default
 
         self.train_ratio = train_ratio
-        self.w = np.zeros(self.dimensions)
-        self.bias = 0
+        self.w = np.zeros(self.num_features)
         self._split_data()
 
     def _split_data(self):
@@ -42,12 +46,12 @@ class SVM:
         self.class_col_test = self.class_col[self.num_train_samples:]
 
     def _predict(self, x_i: np.ndarray):
-        return np.sign(np.dot(x_i, self.w) - self.bias)
+        return np.sign(np.dot(x_i, self.w))
 
     def _train_predict(self, x_i_class: int, x_i: np.ndarray):
-        return x_i_class * (np.dot(x_i, self.w) - self.bias) >= 1
+        return x_i_class * (np.dot(x_i, self.w)) >= 1
 
-    def fit(self, c: float = c_default, print_epoch_result: bool = True, wipe: bool = True):
+    def fit_gd(self, c: float = c_default, print_epoch_result: bool = True, wipe: bool = True):
         if wipe:
             self._wipe()
 
@@ -55,6 +59,7 @@ class SVM:
         samples_classes = np.where(self.class_col_train == 0, -1, 1)
 
         for epoch in range(1, self.num_epochs):
+            self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes, random_state=0)
             correct_predictions_per_epoch = 0
             incorrect_predictions_per_epoch = 0
             learning_rate = 1 / epoch
@@ -63,15 +68,56 @@ class SVM:
 
                 if is_correctly_predicted:
                     correct_predictions_per_epoch += 1
-                    self.w -= (1 - learning_rate) * (c * self.w)
+                    self.w -= (1 - self.learn_rate) * (c * self.w)
                 else:
                     incorrect_predictions_per_epoch += 1
-                    self.w -= (1 - learning_rate) * (c * self.w - np.dot(x_i, samples_classes[index]))
-                    self.bias -= (1 - learning_rate) * samples_classes[index]
+                    self.w -= (1 - self.learn_rate) * (c * self.w - np.dot(x_i, samples_classes[index]))
 
             if print_epoch_result:
                 print('Epoch={}, incorrect predictions={}, correct predictions={}'
                       .format(epoch, incorrect_predictions_per_epoch, correct_predictions_per_epoch))
+
+    def fit_sgd(self, c_param: float = c_default, print_epoch_result: bool = True, wipe: bool = True):
+        if wipe:
+            self._wipe()
+
+        print("c param={}".format(c_param))
+        samples_classes = np.where(self.class_col_train == 0, -1, 1)
+
+        for epoch in range(1, self.num_epochs):
+            self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes, random_state=0)
+            correct_predictions_per_epoch = 0
+            incorrect_predictions_per_epoch = 0
+            learning_rate = 1 / epoch
+            for index, x_i in enumerate(self.train_data):
+
+                cost = self.calculate_cost_sgd(samples_classes[index], x_i, c_param)
+                self.w -= (learning_rate * cost)
+
+                if self._train_predict(samples_classes[index], x_i):
+                    correct_predictions_per_epoch += 1
+                else:
+                    incorrect_predictions_per_epoch += 1
+
+            if print_epoch_result:
+                print('Epoch={}, incorrect predictions={}, correct predictions={}'
+                      .format(epoch, incorrect_predictions_per_epoch, correct_predictions_per_epoch))
+
+    def calculate_cost_sgd(self, class_column: np.ndarray, x_i: np.ndarray, c_param: float):
+        margins = 1 - (class_column * (np.dot(x_i, self.w) + self.b))
+        weights_d = np.zeros(len(self.w))
+
+        for index, margin in enumerate(margins):
+            # hinge loss function
+            if max(0, margin) == 0:
+                di = self.w
+            else:
+                di = self.w - (c_param * class_column[index] * x_i[index])
+            weights_d += di
+
+        # * 1/N, i.e., the average
+        weights_d = weights_d / len(class_column)
+        return weights_d
 
     def test(self):
         samples_classes = np.where(self.class_col_test == 0, -1, 1)
@@ -89,14 +135,13 @@ class SVM:
               .format(incorrect_predictions, correct_predictions, 1 - (incorrect_predictions / correct_predictions)))
 
     def _wipe(self):
-        self.w = np.zeros(self.dimensions)
-        self.bias = 0
+        self.w = np.zeros(self.num_features)
 
     def iterate_c_params(self):
         for c in SVM.c_params:
             print('c param = {}'.format(c))
             self._wipe()
-            self.fit(c=c, print_epoch_result=False)
+            self.fit_gd(c=c, print_epoch_result=False)
             self.test()
 
 
@@ -122,7 +167,7 @@ if __name__ == '__main__':
         root_path + 'vectorised_matrix.npy',
         root_path + 'vocabulary_full.csv',
         3,
-        60000,
+        3000,
         limit_nrows=True)
     data = np.load('C:\\Users\\kaspe\\OneDrive\\Pulpit\\full\\vectorised_matrix.npy')
     svm = SVM(data, 0)

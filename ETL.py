@@ -119,11 +119,12 @@ def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, t
     for stem_index, stem in enumerate(vocab_counter_reduced.items()):
         score = tf_idf_scores.get(stem, 0)
         row[stem_index + 1] = score
-        row_sum += score
+        row_sum += math.pow(score, 2)
+    length = math.sqrt(row_sum)
     # normalise
     if row_sum > 0:
         for i in range(1, len(row) - 1):
-            row[i] = row[i] / row_sum
+            row[i] = row[i] / length
 
 
 def create_vectorised_matrix(dataframe: pd.DataFrame, vocab_counter_reduced: dict, term_to_sample_count: dict):
