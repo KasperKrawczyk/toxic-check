@@ -1,5 +1,3 @@
-import numpy.random
-import pandas as pd
 import numpy as np
 import sklearn.utils
 
@@ -8,14 +6,14 @@ import ETL
 
 class SVM:
     c_params = [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000]
-    c_default = 100000
+    c_param_default = 100000
 
     def __init__(self, input_data: np.ndarray,
                  class_col_ind: int,
                  learn_rate=0.1,
                  num_epochs=50,
                  train_ratio=0.8):
-        numpy.random.shuffle(input_data)
+        np.random.shuffle(input_data)
         self.train_data = None
         self.test_data = None
         self.num_train_samples = None
@@ -31,7 +29,7 @@ class SVM:
         self.class_col = input_data[:, class_col_ind]
         self.learn_rate = learn_rate
         self.num_epochs = num_epochs
-        self.c = SVM.c_default
+        self.c = SVM.c_param_default
 
         self.train_ratio = train_ratio
         self.w = np.zeros(self.num_features)
@@ -51,33 +49,7 @@ class SVM:
     def _train_predict(self, x_i_class: int, x_i: np.ndarray):
         return x_i_class * (np.dot(x_i, self.w)) >= 1
 
-    def fit_gd(self, c: float = c_default, print_epoch_result: bool = True, wipe: bool = True):
-        if wipe:
-            self._wipe()
-
-        print("c param={}".format(c))
-        samples_classes = np.where(self.class_col_train == 0, -1, 1)
-
-        for epoch in range(1, self.num_epochs):
-            self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes, random_state=0)
-            correct_predictions_per_epoch = 0
-            incorrect_predictions_per_epoch = 0
-            learning_rate = 1 / epoch
-            for index, x_i in enumerate(self.train_data):
-                is_correctly_predicted = self._train_predict(samples_classes[index], x_i)
-
-                if is_correctly_predicted:
-                    correct_predictions_per_epoch += 1
-                    self.w -= (1 - self.learn_rate) * (c * self.w)
-                else:
-                    incorrect_predictions_per_epoch += 1
-                    self.w -= (1 - self.learn_rate) * (c * self.w - np.dot(x_i, samples_classes[index]))
-
-            if print_epoch_result:
-                print('Epoch={}, incorrect predictions={}, correct predictions={}'
-                      .format(epoch, incorrect_predictions_per_epoch, correct_predictions_per_epoch))
-
-    def fit_sgd(self, c_param: float = c_default, print_epoch_result: bool = True, wipe: bool = True):
+    def fit_gd(self, c_param: float = c_param_default, print_epoch_result: bool = True, wipe: bool = True):
         if wipe:
             self._wipe()
 
@@ -90,11 +62,38 @@ class SVM:
             incorrect_predictions_per_epoch = 0
             learning_rate = 1 / epoch
             for index, x_i in enumerate(self.train_data):
+                is_correctly_predicted = self._train_predict(samples_classes[index], x_i)
 
-                cost = self.calculate_cost_sgd(samples_classes[index], x_i, c_param)
+                if is_correctly_predicted:
+                    correct_predictions_per_epoch += 1
+                    self.w -= (1 - self.learn_rate) * (c_param * self.w)
+                else:
+                    incorrect_predictions_per_epoch += 1
+                    self.w -= (1 - self.learn_rate) * (c_param * self.w - np.dot(x_i, samples_classes[index]))
+
+            if print_epoch_result:
+                print('Epoch={}, incorrect predictions={}, correct predictions={}'
+                      .format(epoch, incorrect_predictions_per_epoch, correct_predictions_per_epoch))
+
+    def fit_sgd(self, c_param: float = c_param_default, print_epoch_result: bool = True, wipe: bool = True):
+        if wipe:
+            self._wipe()
+
+        samples_classes = np.where(self.class_col_train == 0, -1, 1)
+
+        for epoch in range(1, self.num_epochs):
+            self.train_data, samples_classes = sklearn\
+                .utils\
+                .shuffle(self.train_data, samples_classes, random_state=np.random.randint(0, 42))
+            correct_predictions_per_epoch = 0
+            incorrect_predictions_per_epoch = 0
+            learning_rate = 1 / epoch
+            for index, x_i in enumerate(self.train_data):
+
+                cost, predicted = self.calculate_cost_sgd(samples_classes[index], x_i, c_param)
                 self.w -= (learning_rate * cost)
 
-                if self._train_predict(samples_classes[index], x_i):
+                if predicted:
                     correct_predictions_per_epoch += 1
                 else:
                     incorrect_predictions_per_epoch += 1
@@ -103,21 +102,19 @@ class SVM:
                 print('Epoch={}, incorrect predictions={}, correct predictions={}'
                       .format(epoch, incorrect_predictions_per_epoch, correct_predictions_per_epoch))
 
-    def calculate_cost_sgd(self, class_column: np.ndarray, x_i: np.ndarray, c_param: float):
-        margins = 1 - (class_column * (np.dot(x_i, self.w) + self.b))
+    def calculate_cost_sgd(self, x_i_class: int, x_i: np.ndarray, c_param: float):
+        margin = 1 - (x_i_class * (np.dot(x_i, self.w)))
         weights_d = np.zeros(len(self.w))
 
-        for index, margin in enumerate(margins):
-            # hinge loss function
-            if max(0, margin) == 0:
-                di = self.w
-            else:
-                di = self.w - (c_param * class_column[index] * x_i[index])
-            weights_d += di
+        # hinge loss function
+        if max(0, margin) == 0:
+            weights_d += self.w
+            predicted = True
+        else:
+            weights_d += self.w - (c_param * x_i_class)
+            predicted = False
 
-        # * 1/N, i.e., the average
-        weights_d = weights_d / len(class_column)
-        return weights_d
+        return weights_d, predicted
 
     def test(self):
         samples_classes = np.where(self.class_col_test == 0, -1, 1)
@@ -131,17 +128,16 @@ class SVM:
             else:
                 incorrect_predictions += 1
 
-        print('Test data set. Incorrect predictions={}, correct predictions={}, {}% correct'
-              .format(incorrect_predictions, correct_predictions, 1 - (incorrect_predictions / correct_predictions)))
+        print('Test data set. incorrect predictions={}, correct predictions={}, {}% correct'
+              .format(incorrect_predictions, correct_predictions, (correct_predictions / len(self.test_data))))
 
     def _wipe(self):
         self.w = np.zeros(self.num_features)
 
     def iterate_c_params(self):
-        for c in SVM.c_params:
-            print('c param = {}'.format(c))
-            self._wipe()
-            self.fit_gd(c=c, print_epoch_result=False)
+        for c_param in SVM.c_params:
+            print('c param = {}'.format(c_param))
+            self.fit_sgd(c_param=c_param, print_epoch_result=False)
             self.test()
 
 

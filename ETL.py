@@ -117,7 +117,7 @@ def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, t
     # create vector
     row_sum = 0
     for stem_index, stem in enumerate(vocab_counter_reduced.items()):
-        score = tf_idf_scores.get(stem, 0)
+        score = tf_idf_scores.get(stem[0], 0)
         row[stem_index + 1] = score
         row_sum += math.pow(score, 2)
     length = math.sqrt(row_sum)
