@@ -89,6 +89,7 @@ def process_dataset(
     # save
     df.to_csv(processed_dataset_file_path)
     np.save(vectorised_matrix_file_path, vectorised_matrix)
+    # pd.DataFrame(vectorised_matrix).to_excel(vectorised_matrix_file_path.split('.')[0] + '.xlsx', index=False)
     save_vocabulary(vocab_counter_reduced, vocabulary_file_path)
     # winsound.Beep(340, 3000)
 
@@ -104,10 +105,10 @@ def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, t
     # get TF (term frequency)
     for token in sample_tokens:
         sample_frequencies[token] += 1
-    tf_scores = {token: (frequency / num_of_tokens_in_sample) for token, frequency in sample_frequencies.items()}
+    tf_scores = {token: math.log10(frequency + 1) for token, frequency in sample_frequencies.items()}
 
     # get IDF (inverse document frequency)
-    idf_scores = {token: math.log(num_of_samples / term_to_sample_count[token]) for token in sample_tokens}
+    idf_scores = {token: math.log10(num_of_samples / term_to_sample_count[token]) for token in sample_tokens}
 
     # get TF-IDF
     tf_idf_scores = {token: (tf_scores[token] * idf_scores[token]) for token in sample_tokens}

@@ -11,7 +11,7 @@ class SVM:
     def __init__(self, input_data: np.ndarray,
                  class_col_ind: int,
                  learn_rate=0.1,
-                 num_epochs=50,
+                 num_epochs=500,
                  train_ratio=0.8):
         np.random.shuffle(input_data)
         self.train_data = None
@@ -163,7 +163,7 @@ if __name__ == '__main__':
         root_path + 'vectorised_matrix.npy',
         root_path + 'vocabulary_full.csv',
         3,
-        3000,
+        15000,
         limit_nrows=True)
     data = np.load('C:\\Users\\kaspe\\OneDrive\\Pulpit\\full\\vectorised_matrix.npy')
     svm = SVM(data, 0)
