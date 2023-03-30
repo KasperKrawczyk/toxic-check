@@ -86,6 +86,11 @@ def process_dataset(
             profane_samples_count += 1
     print('Profane samples count: {}'.format(profane_samples_count))
     # winsound.Beep(440, 1000)
+
+    tf_idf_scores, tf_scores, idf_scores = vectorise_2(vocab_counter_reduced, term_to_sample_count, df['profanity'], df['tokens'], profane_only=False)
+    profane_only_tf_idf_scores, profane_only_tf_scores, profane_only_idf_scores = vectorise_2(vocab_counter_reduced, term_to_sample_count, df['profanity'], df['tokens'], profane_only=True)
+    np.savetxt('C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\tf_idf_scores_new.csv', tf_idf_scores, delimiter=',')
+    np.savetxt('C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\tf_idf_scores_old.csv', vectorised_matrix, delimiter=',')
     # save
     df.to_csv(processed_dataset_file_path)
     np.save(vectorised_matrix_file_path, vectorised_matrix)
@@ -130,7 +135,8 @@ def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, t
 def vectorise_2(vocab_counter_reduced: dict,
                 term_to_sample_count: dict,
                 classification_column: pd.Series,
-                tokens_column: pd.Series):
+                tokens_column: pd.Series,
+                profane_only: bool):
     num_samples = classification_column.size
     num_tokens = len(vocab_counter_reduced.items())
 
@@ -138,17 +144,32 @@ def vectorise_2(vocab_counter_reduced: dict,
     idf_scores = np.zeros((num_samples, num_tokens))
 
     for sample_index in range(0, num_samples):
+        if profane_only:
+            if classification_column.values[sample_index] == 0:
+                pass
+
         tf = defaultdict(int)
 
         for token in tokens_column.values[sample_index]:
             tf[token] += 1
 
-        for term_index, term in enumerate(vocab_counter_reduced.items()):
-
+        for term_index, term_count_tuple in enumerate(vocab_counter_reduced.items()):
+            term = term_count_tuple[0]
+            term_count = term_to_sample_count[term]
             tf_scores[sample_index][term_index] = math.log10(tf[term] + 1)
-            idf_scores[sample_index][term_index] = math.log10(num_samples / term_to_sample_count[term])
+            idf_scores[sample_index][term_index] = 0 if term_count == 0 else math.log10(num_samples / term_to_sample_count[term])
 
-    return tf_scores * idf_scores, tf_scores, idf_scores
+    tf_idf_scores = tf_scores * idf_scores
+    norms = np.apply_along_axis(np.linalg.norm, axis=1, arr=tf_idf_scores)
+    for sample_index, row in enumerate(tf_idf_scores):
+        norm = norms[sample_index]
+        for term_index, value in enumerate(row):
+            row[term_index] = 0 if norm == 0 else value / norm
+
+    # add classification column
+    tf_idf_scores = np.c_[classification_column.to_numpy(), tf_idf_scores]
+
+    return tf_idf_scores, tf_scores, idf_scores
 
 
 

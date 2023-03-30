@@ -156,14 +156,14 @@ class SVM:
 #     return train_err, test_err
 
 if __name__ == '__main__':
-    root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\full\\'
+    root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
     ETL.process_dataset(
         'data/train.csv',
         root_path + 'clean_full.csv',
         root_path + 'vectorised_matrix.npy',
         root_path + 'vocabulary_full.csv',
         3,
-        1000,
+        100,
         limit_nrows=True)
     data = np.load('C:\\Users\\kaspe\\OneDrive\\Pulpit\\full\\vectorised_matrix.npy')
     svm = SVM(data, 0)
