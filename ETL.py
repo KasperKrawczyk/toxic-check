@@ -127,6 +127,32 @@ def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, t
         for i in range(1, len(row) - 1):
             row[i] = row[i] / length
 
+def vectorise_2(vocab_counter_reduced: dict,
+                term_to_sample_count: dict,
+                classification_column: pd.Series,
+                tokens_column: pd.Series):
+    num_samples = classification_column.size
+    num_tokens = len(vocab_counter_reduced.items())
+
+    tf_scores = np.zeros((num_samples, num_tokens))
+    idf_scores = np.zeros((num_samples, num_tokens))
+
+    for sample_index in range(0, num_samples):
+        tf = defaultdict(int)
+
+        for token in tokens_column.values[sample_index]:
+            tf[token] += 1
+
+        for term_index, term in enumerate(vocab_counter_reduced.items()):
+
+            tf_scores[sample_index][term_index] = math.log10(tf[term] + 1)
+            idf_scores[sample_index][term_index] = math.log10(num_samples / term_to_sample_count[term])
+
+    return tf_scores * idf_scores, tf_scores, idf_scores
+
+
+
+
 
 def create_vectorised_matrix(dataframe: pd.DataFrame, vocab_counter_reduced: dict, term_to_sample_count: dict):
     classification_column = dataframe['profanity']

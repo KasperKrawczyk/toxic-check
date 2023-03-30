@@ -163,7 +163,7 @@ if __name__ == '__main__':
         root_path + 'vectorised_matrix.npy',
         root_path + 'vocabulary_full.csv',
         3,
-        15000,
+        1000,
         limit_nrows=True)
     data = np.load('C:\\Users\\kaspe\\OneDrive\\Pulpit\\full\\vectorised_matrix.npy')
     svm = SVM(data, 0)
