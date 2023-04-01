@@ -11,7 +11,7 @@ class SVM:
     def __init__(self, input_data: np.ndarray,
                  class_col_ind: int,
                  learn_rate=0.1,
-                 num_epochs=500,
+                 num_epochs=100,
                  train_ratio=0.8):
         np.random.shuffle(input_data)
         self.train_data = None
@@ -60,7 +60,7 @@ class SVM:
             self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes, random_state=0)
             correct_predictions_per_epoch = 0
             incorrect_predictions_per_epoch = 0
-            learning_rate = 1 / epoch
+            self.learn_rate = 1 / epoch
             for index, x_i in enumerate(self.train_data):
                 is_correctly_predicted = self._train_predict(samples_classes[index], x_i)
 
@@ -82,16 +82,16 @@ class SVM:
         samples_classes = np.where(self.class_col_train == 0, -1, 1)
 
         for epoch in range(1, self.num_epochs):
-            self.train_data, samples_classes = sklearn\
-                .utils\
-                .shuffle(self.train_data, samples_classes, random_state=np.random.randint(0, 42))
+            # self.train_data, samples_classes = sklearn\
+            #     .utils\
+            #     .shuffle(self.train_data, samples_classes, random_state=np.random.randint(0, 42))
             correct_predictions_per_epoch = 0
             incorrect_predictions_per_epoch = 0
-            learning_rate = 1 / epoch
+            self.learn_rate = 1 / epoch
             for index, x_i in enumerate(self.train_data):
 
                 cost, predicted = self.calculate_cost_sgd(samples_classes[index], x_i, c_param)
-                self.w -= (learning_rate * cost)
+                self.w -= (self.learn_rate * cost)
 
                 if predicted:
                     correct_predictions_per_epoch += 1
@@ -129,7 +129,7 @@ class SVM:
                 incorrect_predictions += 1
 
         print('Test data set. incorrect predictions={}, correct predictions={}, {}% correct'
-              .format(incorrect_predictions, correct_predictions, (correct_predictions / len(self.test_data))))
+              .format(incorrect_predictions, correct_predictions, (correct_predictions / len(self.test_data)) * 100))
 
     def _wipe(self):
         self.w = np.zeros(self.num_features)
@@ -163,7 +163,7 @@ if __name__ == '__main__':
         root_path + 'vectorised_matrix.npy',
         root_path + 'vocabulary_full.csv',
         3,
-        100,
+        10000,
         limit_nrows=True)
     data = np.load('C:\\Users\\kaspe\\OneDrive\\Pulpit\\full\\vectorised_matrix.npy')
     svm = SVM(data, 0)

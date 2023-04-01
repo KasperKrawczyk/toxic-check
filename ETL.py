@@ -78,22 +78,22 @@ def process_dataset(
     term_to_sample_count = defaultdict(int)
     df['tokens'].apply(lambda x: count_num_of_samples_with_term(x, term_to_sample_count, vocab_counter_reduced))
 
-    vectorised_matrix = create_vectorised_matrix(df, vocab_counter_reduced, term_to_sample_count)
-
-    profane_samples_count = 0
-    for row in vectorised_matrix:
-        if row[0] == 1:
-            profane_samples_count += 1
-    print('Profane samples count: {}'.format(profane_samples_count))
+    # vectorised_matrix = create_vectorised_matrix(df, vocab_counter_reduced, term_to_sample_count)
+    #
+    # profane_samples_count = 0
+    # for row in vectorised_matrix:
+    #     if row[0] == 1:
+    #         profane_samples_count += 1
+    # print('Profane samples count: {}'.format(profane_samples_count))
     # winsound.Beep(440, 1000)
 
-    tf_idf_scores, tf_scores, idf_scores = vectorise_2(vocab_counter_reduced, term_to_sample_count, df['profanity'], df['tokens'], profane_only=False)
-    profane_only_tf_idf_scores, profane_only_tf_scores, profane_only_idf_scores = vectorise_2(vocab_counter_reduced, term_to_sample_count, df['profanity'], df['tokens'], profane_only=True)
+    tf_idf_scores, tf_scores, idf_scores = vectorise_tf_idf(vocab_counter_reduced, term_to_sample_count, df['profanity'], df['tokens'], profane_only=False)
+    # profane_only_tf_idf_scores, profane_only_tf_scores, profane_only_idf_scores = vectorise_2(vocab_counter_reduced, term_to_sample_count, df['profanity'], df['tokens'], profane_only=True)
     np.savetxt('C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\tf_idf_scores_new.csv', tf_idf_scores, delimiter=',')
-    np.savetxt('C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\tf_idf_scores_old.csv', vectorised_matrix, delimiter=',')
+    # np.savetxt('C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\tf_idf_scores_old.csv', vectorised_matrix, delimiter=',')
     # save
     df.to_csv(processed_dataset_file_path)
-    np.save(vectorised_matrix_file_path, vectorised_matrix)
+    np.save(vectorised_matrix_file_path, tf_idf_scores)
     # pd.DataFrame(vectorised_matrix).to_excel(vectorised_matrix_file_path.split('.')[0] + '.xlsx', index=False)
     save_vocabulary(vocab_counter_reduced, vocabulary_file_path)
     # winsound.Beep(340, 3000)
@@ -132,11 +132,11 @@ def vectorise(sample_index: int, row: np.ndarray, vocab_counter_reduced: dict, t
         for i in range(1, len(row) - 1):
             row[i] = row[i] / length
 
-def vectorise_2(vocab_counter_reduced: dict,
-                term_to_sample_count: dict,
-                classification_column: pd.Series,
-                tokens_column: pd.Series,
-                profane_only: bool):
+def vectorise_tf_idf(vocab_counter_reduced: dict,
+                     term_to_sample_count: dict,
+                     classification_column: pd.Series,
+                     tokens_column: pd.Series,
+                     profane_only: bool):
     num_samples = classification_column.size
     num_tokens = len(vocab_counter_reduced.items())
 
