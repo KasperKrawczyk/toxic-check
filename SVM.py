@@ -6,7 +6,7 @@ from TfIdfVectoriser import TfIdfVectoriser
 
 
 class SVM:
-    c_params = [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000]
+    c_params = [10 ** p for p in range(-5, 1)]
     c_param_default = 100000
 
     def __init__(self,
@@ -171,13 +171,11 @@ def split_dataframe(dataframe: pd.DataFrame, train_ratio: float):
 
 if __name__ == '__main__':
     root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
-    df = pd.read_csv('data/train.csv', nrows=550)
+    df = pd.read_csv('data/train.csv', nrows=100)
     train_df, test_df = split_dataframe(df, 0.8)
     tf_idf_vectoriser = TfIdfVectoriser()
     train_tf_idf_mat = tf_idf_vectoriser.fit_transform(train_df)
-    print(train_tf_idf_mat[:10])
     test_tf_idf_mat = tf_idf_vectoriser.transform(test_df)
-    print(test_tf_idf_mat[:10])
 
 
     # ETL.process_dataset(
