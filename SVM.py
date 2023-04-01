@@ -105,7 +105,7 @@ class SVM:
                 else:
                     incorrect_predictions_per_epoch += 1
 
-            if print_epoch_result:
+            if print_epoch_result and epoch % 10 == 0:
                 print('Epoch={}, incorrect predictions={}, correct predictions={}'
                       .format(epoch, incorrect_predictions_per_epoch, correct_predictions_per_epoch))
 
@@ -144,7 +144,7 @@ class SVM:
     def iterate_c_params(self):
         for c_param in SVM.c_params:
             print('c param = {}'.format(c_param))
-            self.fit_sgd(c_param=c_param, print_epoch_result=True)
+            self.fit_gd(c_param=c_param, print_epoch_result=True)
             self.test()
 
 
@@ -166,16 +166,18 @@ def split_dataframe(dataframe: pd.DataFrame, train_ratio: float):
     repr('Returns 1. train set, 2. test set')
     num_samples = dataframe.shape[0]
     num_train_samples = int(num_samples * train_ratio)
-    return dataframe.iloc[:num_train_samples, :], dataframe.iloc[num_train_samples:, :]
+    return dataframe.iloc[:num_train_samples, :].copy(), dataframe.iloc[num_train_samples:, :].copy()
 
 
 if __name__ == '__main__':
     root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
-    df = pd.read_csv('data/train.csv', nrows=10000)
+    df = pd.read_csv('data/train.csv', nrows=550)
     train_df, test_df = split_dataframe(df, 0.8)
     tf_idf_vectoriser = TfIdfVectoriser()
-    train_tf_idf_mat, _, _ = tf_idf_vectoriser.fit_transform(train_df)
-    test_tf_idf_mat, _, _ = tf_idf_vectoriser.transform(test_df)
+    train_tf_idf_mat = tf_idf_vectoriser.fit_transform(train_df)
+    print(train_tf_idf_mat[:10])
+    test_tf_idf_mat = tf_idf_vectoriser.transform(test_df)
+    print(test_tf_idf_mat[:10])
 
 
     # ETL.process_dataset(

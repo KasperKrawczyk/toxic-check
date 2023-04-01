@@ -75,9 +75,8 @@ class TfIdfVectoriser:
         # calculate the num of samples each term appears in (needed for TF-IDF)
         df['tokens'].apply(lambda x: self._count_num_of_samples_with_term(x))
 
-        tf_idf_scores, tf_scores, idf_scores = self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False)
+        return self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False)
 
-        return tf_idf_scores, tf_scores, idf_scores
         # save
         # np.savetxt(self.output_root_dir_path + 'tf_idf_scores_new.csv', tf_idf_scores, delimiter=',')
         # df.to_csv(self.output_root_dir_path + '')
@@ -97,9 +96,7 @@ class TfIdfVectoriser:
 
         # calculate the num of samples each term appears in (needed for TF-IDF)
 
-        tf_idf_scores, tf_scores, idf_scores = self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False)
-
-        return tf_idf_scores, tf_scores, idf_scores
+        return self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False)
 
     def _vectorise_tf_idf(self,
                           classification_column: pd.Series,
@@ -138,4 +135,4 @@ class TfIdfVectoriser:
         # add classification column
         tf_idf_scores = np.c_[classification_column.to_numpy(), tf_idf_scores]
 
-        return tf_idf_scores, tf_scores, idf_scores
+        return tf_idf_scores
