@@ -14,23 +14,13 @@ class TfIdfVectoriser:
     porter_stemmer = PorterStemmer()
     term_to_index = defaultdict(int)
     vocab_counter_reduced = dict()
-    term_to_sample_count = dict()
+    term_to_sample_count = defaultdict(int)
     min_stem_occurrence = 3
 
-    def __init__(self,
-                 raw_dataset_file_path: str,
-                 output_root_dir_path: str,
-                 raw_data_first_n_rows: int,
-                 limit_nrows: bool = False,
-                 min_stem_occurrence: int = 3
-                 ):
-        self.raw_dataset_file_path = raw_dataset_file_path
-        self.output_root_dir_path = output_root_dir_path
-        self.raw_data_first_n_rows = raw_data_first_n_rows
-        self.limit_nrows = limit_nrows
+    def __init__(self, min_stem_occurrence: int = 3):
         self.min_stem_occurrence = min_stem_occurrence
 
-    def _process_sample_text(self, raw_text: str):
+    def _process_sample_text(self, raw_text: str, isFit: bool):
         # split
         tokens = word_tokenize(raw_text)
         # to lower case, strip new line feeds, carriage returns, and non-alpha
@@ -42,7 +32,11 @@ class TfIdfVectoriser:
         words_non_stopwords = [word[:20] for word in words_no_punct if word not in self.stopwords_set]
         # extract stems
         stems = [self.porter_stemmer.stem(word) for word in words_non_stopwords]
-        self.vocab_counter.update(stems)
+        if isFit:
+            self.vocab_counter.update(stems)
+        else:
+            # allow only stems present in the fitted vocabulary
+            stems = [stem for stem in stems if self.vocab_counter_reduced.get(stem, None) is not None]
         return stems
 
     def _filter_min_occurrence_stems(self, stems: list):
@@ -55,31 +49,23 @@ class TfIdfVectoriser:
 
     def _get_reduced_vocab(self):
         # vocab_counter_reduced is alphabetically ordered and will be used as to vectorise samples
-        self.vocab_counter_reduced = {stem: count for stem, count in sorted(self.vocab_counter.items()) if
-                                      count >= self.min_stem_occurrence}
+        return {stem: count for stem, count in sorted(self.vocab_counter.items()) if
+                count >= self.min_stem_occurrence}
 
     def _save_vocabulary(self, vocabulary_file_path: str):
         with open(vocabulary_file_path, 'w', encoding='utf-8') as vocab_file:
             for stem, count in self.vocab_counter_reduced.items(): vocab_file.write(f'{stem},{count}\n')
 
-
-    def fit_transform(self):
-        # covert to set the stopwords to remove from tokens
-
-        if self.limit_nrows:
-            df = pd.read_csv(self.raw_dataset_file_path, nrows=self.raw_data_first_n_rows)
-        else:
-            df = pd.read_csv(self.raw_dataset_file_path)
+    def fit_transform(self, df: pd.DataFrame):
 
         # a sample is classified as 'profanity' if any of the other classes is non-zero
         df['profanity'] = np.where(df.iloc[:, 2:].sum(axis=1) > 0, 1, 0)
         # winsound.Beep(560, 1000)
         # extract tokens
-        df['tokens'] = df.apply(lambda x: self._process_sample_text(x['comment_text']), axis=1)
+        df['tokens'] = df.apply(lambda x: self._process_sample_text(x['comment_text'], isFit=True), axis=1)
         # filter out words that occur fewer than two times in the vocabulary
         # vocab_counter_reduced is alphabetically ordered and will be used as to vectorise samples
-        self.vocab_counter_reduced = {stem: count for stem, count in sorted(self.vocab_counter.items()) if
-                                 count >= self.min_stem_occurrence}
+        self.vocab_counter_reduced = self._get_reduced_vocab()
         df['tokens'] = df['tokens'].apply(lambda x: self._filter_min_occurrence_stems(x))
 
         # move the tokens column 2 (after the raw text)
@@ -98,6 +84,22 @@ class TfIdfVectoriser:
         # np.save(self.output_root_dir_path + '', tf_idf_scores)
         # self.save_vocabulary(self.output_root_dir_path + '')
 
+    def transform(self, df: pd.DataFrame):
+        # a sample is classified as 'profanity' if any of the other classes is non-zero
+        df['profanity'] = np.where(df.iloc[:, 2:].sum(axis=1) > 0, 1, 0)
+        # extract tokens
+        df['tokens'] = df.apply(lambda x: self._process_sample_text(x['comment_text'], isFit=False), axis=1)
+        # filter out words that occur fewer than two times in the vocabulary
+
+        # move the tokens column 2 (after the raw text)
+        tokens_col = df.pop('tokens')
+        df.insert(2, 'tokens', tokens_col)
+
+        # calculate the num of samples each term appears in (needed for TF-IDF)
+
+        tf_idf_scores, tf_scores, idf_scores = self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False)
+
+        return tf_idf_scores, tf_scores, idf_scores
 
     def _vectorise_tf_idf(self,
                           classification_column: pd.Series,
@@ -110,9 +112,8 @@ class TfIdfVectoriser:
         idf_scores = np.zeros((num_samples, num_tokens))
 
         for sample_index in range(0, num_samples):
-            if profane_only:
-                if classification_column.values[sample_index] == 0:
-                    pass
+            if profane_only and classification_column.values[sample_index] == 0:
+                pass
 
             tf = defaultdict(int)
 
@@ -123,7 +124,9 @@ class TfIdfVectoriser:
                 term = term_count_tuple[0]
                 term_count = self.term_to_sample_count[term]
                 tf_scores[sample_index][term_index] = math.log10(tf[term] + 1)
-                idf_scores[sample_index][term_index] = 0 if term_count == 0 else math.log10(num_samples / self.term_to_sample_count[term])
+                idf_scores[sample_index][term_index] = 0 \
+                    if term_count == 0 \
+                    else math.log10(num_samples / self.term_to_sample_count[term])
 
         tf_idf_scores = tf_scores * idf_scores
         norms = np.apply_along_axis(np.linalg.norm, axis=1, arr=tf_idf_scores)

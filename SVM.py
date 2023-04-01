@@ -1,47 +1,54 @@
 import numpy as np
+import pandas as pd
 import sklearn.utils
 
-import ETL
+from TfIdfVectoriser import TfIdfVectoriser
 
 
 class SVM:
     c_params = [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000]
     c_param_default = 100000
 
-    def __init__(self, input_data: np.ndarray,
+    def __init__(self,
+                 input_train_data: np.ndarray,
+                 input_test_data: np.ndarray,
                  class_col_ind: int,
                  learn_rate=0.1,
                  num_epochs=100,
                  train_ratio=0.8):
-        np.random.shuffle(input_data)
-        self.train_data = None
-        self.test_data = None
-        self.num_train_samples = None
-        self.num_test_samples = None
+        np.random.shuffle(input_train_data)
+        np.random.shuffle(input_test_data)
+        self.train_data = input_train_data
+        self.test_data = input_test_data
+        self.num_train_samples = self.train_data.shape[0]
+        self.num_test_samples = self.test_data.shape[0]
 
         # slice input so that data doesn't include the classification column
-        self.data = input_data[:, class_col_ind + 1:]
+        # self.train_data = train_data[:, class_col_ind + 1:]
         # add the intercept term (bias) as last column, filled with 1s
-        self.data = np.c_[self.data, np.ones(self.data.shape[0])]
+        self.train_data = np.c_[self.train_data, np.ones(self.train_data.shape[0])]
+        self.test_data = np.c_[self.test_data, np.ones(self.test_data.shape[0])]
         # shape should return a 2-tuple
-        self.num_samples, self.num_features = self.data.shape
+        self.num_train_samples, self.num_features = self.train_data.shape
+        self.num_test_samples, _ = self.test_data.shape
         self.class_col_ind = class_col_ind
-        self.class_col = input_data[:, class_col_ind]
+        self.train_class_col = self.train_data[:, class_col_ind]
+        self.test_class_col = self.test_data[:, class_col_ind]
         self.learn_rate = learn_rate
         self.num_epochs = num_epochs
         self.c = SVM.c_param_default
 
         self.train_ratio = train_ratio
         self.w = np.zeros(self.num_features)
-        self._split_data()
+        # self._split_data()
 
-    def _split_data(self):
-        self.num_train_samples = int(self.num_samples * self.train_ratio)
-        self.num_test_samples = int(self.num_train_samples * (1 - self.train_ratio))
-        self.train_data = self.data[:self.num_train_samples]
-        self.test_data = self.data[self.num_train_samples:]
-        self.class_col_train = self.class_col[:self.num_train_samples]
-        self.class_col_test = self.class_col[self.num_train_samples:]
+    # def _split_data(self):
+    #     self.num_train_samples = int(self.num_train_samples * self.train_ratio)
+    #     self.num_test_samples = int(self.num_train_samples * (1 - self.train_ratio))
+    #     self.train_data = self.data[:self.num_train_samples]
+    #     self.test_data = self.data[self.num_train_samples:]
+    #     self.class_col_train = self.train_class_col[:self.num_train_samples]
+    #     self.class_col_test = self.train_class_col[self.num_train_samples:]
 
     def _predict(self, x_i: np.ndarray):
         return np.sign(np.dot(x_i, self.w))
@@ -54,7 +61,7 @@ class SVM:
             self._wipe()
 
         print("c param={}".format(c_param))
-        samples_classes = np.where(self.class_col_train == 0, -1, 1)
+        samples_classes = np.where(self.train_class_col == 0, -1, 1)
 
         for epoch in range(1, self.num_epochs):
             self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes, random_state=0)
@@ -79,12 +86,12 @@ class SVM:
         if wipe:
             self._wipe()
 
-        samples_classes = np.where(self.class_col_train == 0, -1, 1)
+        samples_classes = np.where(self.train_class_col == 0, -1, 1)
 
         for epoch in range(1, self.num_epochs):
-            # self.train_data, samples_classes = sklearn\
-            #     .utils\
-            #     .shuffle(self.train_data, samples_classes, random_state=np.random.randint(0, 42))
+            self.train_data, samples_classes = sklearn\
+                .utils\
+                .shuffle(self.train_data, samples_classes, random_state=np.random.randint(0, 42))
             correct_predictions_per_epoch = 0
             incorrect_predictions_per_epoch = 0
             self.learn_rate = 1 / epoch
@@ -117,7 +124,7 @@ class SVM:
         return weights_d, predicted
 
     def test(self):
-        samples_classes = np.where(self.class_col_test == 0, -1, 1)
+        samples_classes = np.where(self.test_class_col == 0, -1, 1)
         correct_predictions = 0
         incorrect_predictions = 0
 
@@ -137,7 +144,7 @@ class SVM:
     def iterate_c_params(self):
         for c_param in SVM.c_params:
             print('c param = {}'.format(c_param))
-            self.fit_sgd(c_param=c_param, print_epoch_result=False)
+            self.fit_sgd(c_param=c_param, print_epoch_result=True)
             self.test()
 
 
@@ -155,16 +162,30 @@ class SVM:
 #
 #     return train_err, test_err
 
+def split_dataframe(dataframe: pd.DataFrame, train_ratio: float):
+    repr('Returns 1. train set, 2. test set')
+    num_samples = dataframe.shape[0]
+    num_train_samples = int(num_samples * train_ratio)
+    return dataframe.iloc[:num_train_samples, :], dataframe.iloc[num_train_samples:, :]
+
+
 if __name__ == '__main__':
     root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
-    ETL.process_dataset(
-        'data/train.csv',
-        root_path + 'clean_full.csv',
-        root_path + 'vectorised_matrix.npy',
-        root_path + 'vocabulary_full.csv',
-        3,
-        10000,
-        limit_nrows=True)
-    data = np.load('C:\\Users\\kaspe\\OneDrive\\Pulpit\\full\\vectorised_matrix.npy')
-    svm = SVM(data, 0)
+    df = pd.read_csv('data/train.csv', nrows=10000)
+    train_df, test_df = split_dataframe(df, 0.8)
+    tf_idf_vectoriser = TfIdfVectoriser()
+    train_tf_idf_mat, _, _ = tf_idf_vectoriser.fit_transform(train_df)
+    test_tf_idf_mat, _, _ = tf_idf_vectoriser.transform(test_df)
+
+
+    # ETL.process_dataset(
+    #     'data/train.csv',
+    #     root_path + 'clean_full.csv',
+    #     root_path + 'vectorised_matrix.npy',
+    #     root_path + 'vocabulary_full.csv',
+    #     3,
+    #     10000,
+    #     limit_nrows=True)
+    # data = np.load('C:\\Users\\kaspe\\OneDrive\\Pulpit\\full\\vectorised_matrix.npy')
+    svm = SVM(train_tf_idf_mat, test_tf_idf_mat, 0)
     svm.iterate_c_params()
