@@ -64,10 +64,10 @@ class SVM:
         samples_classes = np.where(self.train_class_col == 0, -1, 1)
 
         for epoch in range(1, self.num_epochs):
-            self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes, random_state=0)
+            self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes, random_state=np.random.randint(0, 42))
             correct_predictions_per_epoch = 0
             incorrect_predictions_per_epoch = 0
-            self.learn_rate = 1 / epoch
+            # self.learn_rate = 1 / epoch
             for index, x_i in enumerate(self.train_data):
                 is_correctly_predicted = self._train_predict(samples_classes[index], x_i)
 
@@ -78,7 +78,7 @@ class SVM:
                     incorrect_predictions_per_epoch += 1
                     self.w -= (1 - self.learn_rate) * (c_param * self.w - np.dot(x_i, samples_classes[index]))
 
-            if print_epoch_result:
+            if print_epoch_result and epoch % 10 == 0:
                 print('Epoch={}, incorrect predictions={}, correct predictions={}'
                       .format(epoch, incorrect_predictions_per_epoch, correct_predictions_per_epoch))
 
@@ -143,8 +143,7 @@ class SVM:
 
     def iterate_c_params(self):
         for c_param in SVM.c_params:
-            print('c param = {}'.format(c_param))
-            self.fit_gd(c_param=c_param, print_epoch_result=True)
+            self.fit_gd(c_param=c_param, print_epoch_result=False)
             self.test()
 
 
@@ -171,7 +170,7 @@ def split_dataframe(dataframe: pd.DataFrame, train_ratio: float):
 
 if __name__ == '__main__':
     root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
-    df = pd.read_csv('data/train.csv', nrows=100)
+    df = pd.read_csv('data/train.csv', nrows=10000)
     train_df, test_df = split_dataframe(df, 0.8)
     tf_idf_vectoriser = TfIdfVectoriser()
     train_tf_idf_mat = tf_idf_vectoriser.fit_transform(train_df)
