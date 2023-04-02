@@ -38,7 +38,7 @@ class TfIdfVectoriser:
             self.vocab_counter.update(stems)
         else:
             # allow only stems present in the fitted vocabulary
-            stems = [stem for stem in stems if self.vocab_counter_reduced.get(stem, None) is not None]
+            stems = [stem for stem in stems if stem in self.vocab_counter_reduced]
         return stems
 
     def _filter_min_occurrence_stems(self, stems: list):
@@ -82,7 +82,8 @@ class TfIdfVectoriser:
         # calculate the num of samples each term appears in (needed for TF-IDF)
         df['tokens'].apply(lambda x: self._count_num_of_samples_with_term(x))
 
-        return self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False, is_being_fit=True)
+        return df['profanity'].to_numpy(), \
+               self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False, is_being_fit=True)
 
         # save
         # np.savetxt(self.output_root_dir_path + 'tf_idf_scores_new.csv', tf_idf_scores, delimiter=',')
@@ -103,7 +104,8 @@ class TfIdfVectoriser:
 
         # calculate the num of samples each term appears in (needed for TF-IDF)
 
-        return self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False, is_being_fit=False)
+        return df['profanity'].to_numpy(), \
+               self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False, is_being_fit=False)
 
     def _vectorise_tf_idf(self,
                           classification_column: pd.Series,
@@ -136,7 +138,7 @@ class TfIdfVectoriser:
                 tf_scores[sample_index][term_index] = math.log10(tf[term] + 1)
                 idf_scores[sample_index][term_index] = 0 \
                     if term_count == 0 \
-                    else math.log10(num_corpus_samples / self.term_to_sample_count[term])
+                    else math.log10((1 + num_corpus_samples) / (1 + self.term_to_sample_count[term]))
 
         tf_idf_scores = tf_scores * idf_scores
         norms = np.apply_along_axis(np.linalg.norm, axis=1, arr=tf_idf_scores)
@@ -146,16 +148,15 @@ class TfIdfVectoriser:
                 row[term_index] = 0 if norm == 0 else value / norm
 
         # add classification column
-        tf_idf_scores = np.c_[classification_column.to_numpy(), tf_idf_scores]
+        # tf_idf_scores = np.c_[classification_column.to_numpy(), tf_idf_scores]
 
         return tf_idf_scores
 
     def _vectorise_tf_idf_single_sample(self, tokens: list[string]):
         num_tokens = len(self.vocab_counter_reduced.items())
 
-        tf_scores = np.zeros((1, num_tokens))
-        idf_scores = np.zeros((1, num_tokens))
-
+        tf_scores = np.zeros(num_tokens)
+        idf_scores = np.zeros(num_tokens)
 
         tf = defaultdict(int)
 
@@ -163,18 +164,18 @@ class TfIdfVectoriser:
             tf[token] += 1
 
         for term_index, term_count_tuple in enumerate(self.vocab_counter_reduced.items()):
-             term = term_count_tuple[0]
-             term_count = self.term_to_sample_count[term]
-             tf_scores[term_index] = math.log10(tf[term] + 1)
-             idf_scores[term_index] = 0 \
-                 if term_count == 0 \
-                 else math.log10(self.num_samples / self.term_to_sample_count[term])
+            term = term_count_tuple[0]
+            term_count = self.term_to_sample_count[term]
+            tf_scores[term_index] = math.log10(tf.get(term, 0) + 1)
+            idf_scores[term_index] = 0 \
+                if term_count == 0 \
+                else math.log10((1 + self.num_samples) / (1 + self.term_to_sample_count[term]))
 
         tf_idf_scores = tf_scores * idf_scores
-        norms = np.apply_along_axis(np.linalg.norm, axis=1, arr=tf_idf_scores)
+        norm = np.apply_along_axis(np.linalg.norm, axis=0, arr=tf_idf_scores).item()
 
         for term_index, value in enumerate(tf_idf_scores):
-            tf_idf_scores[term_index] = 0 if norms[0] == 0 else value / norms[0]
+            tf_idf_scores[term_index] = 0 if norm == 0 else value / norm
 
         return tf_idf_scores
 
@@ -183,4 +184,4 @@ class TfIdfVectoriser:
 
         tf_idf_vector = self._vectorise_tf_idf_single_sample(tokens)
 
-        return tokens
+        return tf_idf_vector

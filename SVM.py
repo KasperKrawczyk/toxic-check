@@ -1,3 +1,5 @@
+import string
+
 import numpy as np
 import pandas as pd
 import sklearn.utils
@@ -7,48 +9,34 @@ from TfIdfVectoriser import TfIdfVectoriser
 
 class SVM:
     c_params = [10 ** p for p in range(-5, 1)]
-    c_param_default = 100000
+    c_param_default = 10 ** -5
 
     def __init__(self,
+                 train_data_class_col: np.ndarray,
                  input_train_data: np.ndarray,
+                 test_data_class_col: np.ndarray,
                  input_test_data: np.ndarray,
-                 class_col_ind: int,
                  learn_rate=0.1,
                  num_epochs=100,
                  train_ratio=0.8):
         np.random.shuffle(input_train_data)
         np.random.shuffle(input_test_data)
-        self.train_data = input_train_data
-        self.test_data = input_test_data
-        self.num_train_samples = self.train_data.shape[0]
-        self.num_test_samples = self.test_data.shape[0]
+        self.num_train_samples = input_train_data.shape[0]
+        self.num_test_samples = input_test_data.shape[0]
 
-        # slice input so that data doesn't include the classification column
-        # self.train_data = train_data[:, class_col_ind + 1:]
         # add the intercept term (bias) as last column, filled with 1s
-        self.train_data = np.c_[self.train_data, np.ones(self.train_data.shape[0])]
-        self.test_data = np.c_[self.test_data, np.ones(self.test_data.shape[0])]
+        self.train_data = np.c_[input_train_data, np.ones(self.num_train_samples)]
+        self.test_data = np.c_[input_test_data, np.ones(self.num_test_samples)]
         # shape should return a 2-tuple
-        self.num_train_samples, self.num_features = self.train_data.shape
-        self.num_test_samples, _ = self.test_data.shape
-        self.class_col_ind = class_col_ind
-        self.train_class_col = self.train_data[:, class_col_ind]
-        self.test_class_col = self.test_data[:, class_col_ind]
+        _, self.num_features = self.train_data.shape
+        self.train_class_col = train_data_class_col
+        self.test_class_col = test_data_class_col
         self.learn_rate = learn_rate
         self.num_epochs = num_epochs
         self.c = SVM.c_param_default
 
         self.train_ratio = train_ratio
         self.w = np.zeros(self.num_features)
-        # self._split_data()
-
-    # def _split_data(self):
-    #     self.num_train_samples = int(self.num_train_samples * self.train_ratio)
-    #     self.num_test_samples = int(self.num_train_samples * (1 - self.train_ratio))
-    #     self.train_data = self.data[:self.num_train_samples]
-    #     self.test_data = self.data[self.num_train_samples:]
-    #     self.class_col_train = self.train_class_col[:self.num_train_samples]
-    #     self.class_col_test = self.train_class_col[self.num_train_samples:]
 
     def _predict(self, x_i: np.ndarray):
         return np.sign(np.dot(x_i, self.w))
@@ -64,10 +52,11 @@ class SVM:
         samples_classes = np.where(self.train_class_col == 0, -1, 1)
 
         for epoch in range(1, self.num_epochs):
-            self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes, random_state=np.random.randint(0, 42))
+            self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes,
+                                                                     random_state=0)
             correct_predictions_per_epoch = 0
             incorrect_predictions_per_epoch = 0
-            # self.learn_rate = 1 / epoch
+            self.learn_rate = 1 / epoch
             for index, x_i in enumerate(self.train_data):
                 is_correctly_predicted = self._train_predict(samples_classes[index], x_i)
 
@@ -89,8 +78,8 @@ class SVM:
         samples_classes = np.where(self.train_class_col == 0, -1, 1)
 
         for epoch in range(1, self.num_epochs):
-            self.train_data, samples_classes = sklearn\
-                .utils\
+            self.train_data, samples_classes = sklearn \
+                .utils \
                 .shuffle(self.train_data, samples_classes, random_state=np.random.randint(0, 42))
             correct_predictions_per_epoch = 0
             incorrect_predictions_per_epoch = 0
@@ -146,6 +135,11 @@ class SVM:
             self.fit_gd(c_param=c_param, print_epoch_result=False)
             self.test()
 
+    def test_new(self, vectoriser: TfIdfVectoriser, text: string):
+        vectorised_text = vectoriser.process_new(text)
+        vectorised_text = np.append(vectorised_text, [1])
+        return self._predict(vectorised_text)
+
 
 # def svm_train_and_test(train_data: np.ndarray, test_data: np.ndarray, reg_params):
 #
@@ -173,18 +167,13 @@ if __name__ == '__main__':
     df = pd.read_csv('data/train.csv', nrows=10000)
     train_df, test_df = split_dataframe(df, 0.8)
     tf_idf_vectoriser = TfIdfVectoriser()
-    train_tf_idf_mat = tf_idf_vectoriser.fit_transform(train_df)
-    test_tf_idf_mat = tf_idf_vectoriser.transform(test_df)
+    y_train, train_tf_idf_mat = tf_idf_vectoriser.fit_transform(train_df)
+    y_test, test_tf_idf_mat = tf_idf_vectoriser.transform(test_df)
 
 
-    # ETL.process_dataset(
-    #     'data/train.csv',
-    #     root_path + 'clean_full.csv',
-    #     root_path + 'vectorised_matrix.npy',
-    #     root_path + 'vocabulary_full.csv',
-    #     3,
-    #     10000,
-    #     limit_nrows=True)
-    # data = np.load('C:\\Users\\kaspe\\OneDrive\\Pulpit\\full\\vectorised_matrix.npy')
-    svm = SVM(train_tf_idf_mat, test_tf_idf_mat, 0)
-    svm.iterate_c_params()
+    svm = SVM(y_train, train_tf_idf_mat, y_test, test_tf_idf_mat)
+    # svm.iterate_c_params()
+    svm.fit_gd(c_param=0.1, print_epoch_result=False)
+    # svm.iterate_c_params()
+    print(svm.test_new(tf_idf_vectoriser, 'i will murder you! this is what happens when a bunch of fucking idiots get down to editing a highly specialised articleyou fucking cunt. this is what happens when a bunch of fucking idiots get down to editing a highly specialised article.'))
+    print(svm.test_new(tf_idf_vectoriser, 'Perfect intro in tf-idf, thank you very much! Very interesting, I’ve wanted to study this field for a long time and you posts it is a real gift. It would be very interesting to read more about use-cases of the technique. And may be you’ll be interested, please, to shed some light on other methods of text corpus representation, if they exists?'))
