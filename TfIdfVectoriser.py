@@ -42,7 +42,7 @@ class TfIdfVectoriser:
         return stems
 
     def _filter_min_occurrence_stems(self, stems: list):
-        return [stem for stem in stems if self.vocab_counter.get(stem) is not None]
+        return [stem for stem in stems if stem in self.vocab_counter_reduced]
 
     def _count_num_of_samples_with_term(self, token_list: list):
         for token in token_list:
@@ -67,7 +67,8 @@ class TfIdfVectoriser:
         self.num_samples = df.shape[0]
         # a sample is classified as 'profanity' if any of the other classes is non-zero
         df['profanity'] = np.where(df.iloc[:, 2:].sum(axis=1) > 0, 1, 0)
-        # winsound.Beep(560, 1000)
+        # df = df[df['profanity'] == 1].copy()
+
         # extract tokens
         df['tokens'] = df.apply(lambda x: self._process_sample_text(x['comment_text'], is_being_fit=True), axis=1)
         # filter out words that occur fewer than two times in the vocabulary

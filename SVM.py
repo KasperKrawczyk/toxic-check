@@ -7,8 +7,20 @@ import sklearn.utils
 from TfIdfVectoriser import TfIdfVectoriser
 
 
+def print_stats(epoch, false_neg, false_pos, true_neg, true_pos):
+    correct_predictions = true_pos + true_neg
+    incorrect_predictions = false_pos + false_neg
+    per_cent_correct = (correct_predictions / (correct_predictions + incorrect_predictions)) * 100
+    acc = ((true_pos + true_neg) / (correct_predictions + incorrect_predictions)) * 100
+    print('Epoch={}, TP={}, TN={}, FP={}, FN={}, Acc={}'
+          .format(epoch, true_pos, true_neg, false_pos, false_neg, acc))
+    print('incorrect predictions={}, correct predictions={}, {}% correct'
+          .format(incorrect_predictions, correct_predictions,
+                  per_cent_correct))
+
+
 class SVM:
-    c_params = [10 ** p for p in range(-5, 1)]
+    c_params = [10 ** p for p in range(-6, 1)]
     c_param_default = 10 ** -5
 
     def __init__(self,
@@ -17,7 +29,7 @@ class SVM:
                  test_data_class_col: np.ndarray,
                  input_test_data: np.ndarray,
                  learn_rate=0.1,
-                 num_epochs=100,
+                 num_epochs=1000,
                  train_ratio=0.8):
         np.random.shuffle(input_train_data)
         np.random.shuffle(input_test_data)
@@ -39,10 +51,12 @@ class SVM:
         self.w = np.zeros(self.num_features)
 
     def _predict(self, x_i: np.ndarray):
+        cosine = np.dot(x_i, self.w)
         return np.sign(np.dot(x_i, self.w))
 
     def _train_predict(self, x_i_class: int, x_i: np.ndarray):
-        return x_i_class * (np.dot(x_i, self.w)) >= 1
+        cosine = np.dot(x_i, self.w)
+        return cosine, (x_i_class * cosine >= 1)
 
     def fit_gd(self, c_param: float = c_param_default, print_epoch_result: bool = True, wipe: bool = True):
         if wipe:
@@ -52,24 +66,31 @@ class SVM:
         samples_classes = np.where(self.train_class_col == 0, -1, 1)
 
         for epoch in range(1, self.num_epochs):
-            self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes,
-                                                                     random_state=0)
-            correct_predictions_per_epoch = 0
-            incorrect_predictions_per_epoch = 0
+            # self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes,
+            #                                                          random_state=0)
+            true_pos = 0
+            true_neg = 0
+            false_pos = 0
+            false_neg = 0
             self.learn_rate = 1 / epoch
             for index, x_i in enumerate(self.train_data):
-                is_correctly_predicted = self._train_predict(samples_classes[index], x_i)
+                cosine, is_correctly_predicted = self._train_predict(samples_classes[index], x_i)
 
                 if is_correctly_predicted:
-                    correct_predictions_per_epoch += 1
+                    if samples_classes[index] == -1:
+                        true_pos += 1
+                    else:
+                        true_neg += 1
                     self.w -= (1 - self.learn_rate) * (c_param * self.w)
                 else:
-                    incorrect_predictions_per_epoch += 1
+                    if samples_classes[index] == -1:
+                        false_pos += 1
+                    else:
+                        false_neg += 1
                     self.w -= (1 - self.learn_rate) * (c_param * self.w - np.dot(x_i, samples_classes[index]))
 
             if print_epoch_result and epoch % 10 == 0:
-                print('Epoch={}, incorrect predictions={}, correct predictions={}'
-                      .format(epoch, incorrect_predictions_per_epoch, correct_predictions_per_epoch))
+                print_stats(epoch, false_neg, false_pos, true_neg, true_pos)
 
     def fit_sgd(self, c_param: float = c_param_default, print_epoch_result: bool = True, wipe: bool = True):
         if wipe:
@@ -114,25 +135,32 @@ class SVM:
 
     def test(self):
         samples_classes = np.where(self.test_class_col == 0, -1, 1)
-        correct_predictions = 0
-        incorrect_predictions = 0
+        true_pos = 0
+        true_neg = 0
+        false_pos = 0
+        false_neg = 0
 
-        for index, x_i in enumerate(self.test_data):
+        for i, x_i in enumerate(self.test_data):
             predicted_class = self._predict(x_i)
-            if predicted_class == samples_classes[index]:
-                correct_predictions += 1
+            if predicted_class == samples_classes[i]:
+                if samples_classes[i] == -1:
+                    true_pos += 1
+                else:
+                    true_neg += 1
             else:
-                incorrect_predictions += 1
+                if samples_classes[i] == -1:
+                    false_pos += 1
+                else:
+                    false_neg += 1
 
-        print('Test data set. incorrect predictions={}, correct predictions={}, {}% correct'
-              .format(incorrect_predictions, correct_predictions, (correct_predictions / len(self.test_data)) * 100))
+        print_stats("TEST", true_pos, true_neg, false_pos, false_neg)
 
     def _wipe(self):
         self.w = np.zeros(self.num_features)
 
     def iterate_c_params(self):
         for c_param in SVM.c_params:
-            self.fit_gd(c_param=c_param, print_epoch_result=False)
+            self.fit_gd(c_param=c_param, print_epoch_result=True)
             self.test()
 
     def test_new(self, vectoriser: TfIdfVectoriser, text: string):
@@ -170,10 +198,15 @@ if __name__ == '__main__':
     y_train, train_tf_idf_mat = tf_idf_vectoriser.fit_transform(train_df)
     y_test, test_tf_idf_mat = tf_idf_vectoriser.transform(test_df)
 
-
     svm = SVM(y_train, train_tf_idf_mat, y_test, test_tf_idf_mat)
-    # svm.iterate_c_params()
-    svm.fit_gd(c_param=0.1, print_epoch_result=False)
-    # svm.iterate_c_params()
-    print(svm.test_new(tf_idf_vectoriser, 'i will murder you! this is what happens when a bunch of fucking idiots get down to editing a highly specialised articleyou fucking cunt. this is what happens when a bunch of fucking idiots get down to editing a highly specialised article.'))
-    print(svm.test_new(tf_idf_vectoriser, 'Perfect intro in tf-idf, thank you very much! Very interesting, I’ve wanted to study this field for a long time and you posts it is a real gift. It would be very interesting to read more about use-cases of the technique. And may be you’ll be interested, please, to shed some light on other methods of text corpus representation, if they exists?'))
+    svm.iterate_c_params()
+    # svm.fit_gd(c_param=0.00001, print_epoch_result=True)
+
+    # while True:
+    #     text = input(">>> ")
+    #     print(svm.test_new(tf_idf_vectoriser, text))
+
+    # for index, row in df.iterrows():
+    #     predict = svm.test_new(tf_idf_vectoriser, row['comment_text'])
+    #     if predict == 1:
+    #         print(row['comment_text'])
