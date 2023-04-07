@@ -1,3 +1,4 @@
+import random
 import string
 
 import numpy as np
@@ -78,16 +79,16 @@ class SVM:
 
                 if is_correctly_predicted:
                     if samples_classes[index] == -1:
-                        true_pos += 1
-                    else:
                         true_neg += 1
-                    self.w -= (1 - self.learn_rate) * (c_param * self.w)
+                    else:
+                        true_pos += 1
+                    self.w -= self.learn_rate * (c_param * self.w)
                 else:
                     if samples_classes[index] == -1:
-                        false_pos += 1
-                    else:
                         false_neg += 1
-                    self.w -= (1 - self.learn_rate) * (c_param * self.w - np.dot(x_i, samples_classes[index]))
+                    else:
+                        false_pos += 1
+                    self.w -= self.learn_rate * (c_param * self.w - np.dot(x_i, samples_classes[index]))
 
             if print_epoch_result and epoch % 10 == 0:
                 print_stats(epoch, false_neg, false_pos, true_neg, true_pos)
@@ -144,14 +145,14 @@ class SVM:
             predicted_class = self._predict(x_i)
             if predicted_class == samples_classes[i]:
                 if samples_classes[i] == -1:
-                    true_pos += 1
-                else:
                     true_neg += 1
+                else:
+                    true_pos += 1
             else:
                 if samples_classes[i] == -1:
-                    false_pos += 1
-                else:
                     false_neg += 1
+                else:
+                    false_pos += 1
 
         print_stats("TEST", true_pos, true_neg, false_pos, false_neg)
 
@@ -192,17 +193,19 @@ def split_dataframe(dataframe: pd.DataFrame, train_ratio: float):
 
 if __name__ == '__main__':
     root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
-    df = pd.read_csv('data/train.csv', nrows=10000)
+    df = pd.read_csv('data/train.csv', header=0, skiprows=lambda i: i > 0 and random.random() > 0.075)
     train_df, test_df = split_dataframe(df, 0.8)
     tf_idf_vectoriser = TfIdfVectoriser()
     y_train, train_tf_idf_mat = tf_idf_vectoriser.fit_transform(train_df)
     y_test, test_tf_idf_mat = tf_idf_vectoriser.transform(test_df)
 
     svm = SVM(y_train, train_tf_idf_mat, y_test, test_tf_idf_mat)
-    svm.iterate_c_params()
-    # svm.fit_gd(c_param=0.00001, print_epoch_result=True)
+    # svm.iterate_c_params()
+    svm.fit_gd(c_param=0.00001, print_epoch_result=True)
+    svm.test()
 
-    # while True:
+
+# while True:
     #     text = input(">>> ")
     #     print(svm.test_new(tf_idf_vectoriser, text))
 

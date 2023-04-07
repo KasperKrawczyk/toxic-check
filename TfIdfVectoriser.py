@@ -8,6 +8,10 @@ from collections import Counter, defaultdict
 import string
 
 
+def _get_n_grams(tokens: list, n: int = 6):
+    return [tokens[i: i + n] for i in range(len(tokens) - n + 1)]
+
+
 class TfIdfVectoriser:
     stopwords_set = set(stopwords.words('english'))
     vocab_counter = Counter()
@@ -17,10 +21,11 @@ class TfIdfVectoriser:
     term_to_sample_count = defaultdict(int)
     min_stem_occurrence = 3
 
-    def __init__(self, min_stem_occurrence: int = 3):
+    def __init__(self, min_stem_occurrence: int = 3, min_idf_score: float = 3.2):
         self.has_been_fitted = False
         self.num_samples = None
         self.min_stem_occurrence = min_stem_occurrence
+        self.min_idf_score = min_idf_score
 
     def _process_sample_text(self, raw_text: str, is_being_fit: bool):
         # split
@@ -34,6 +39,8 @@ class TfIdfVectoriser:
         words_non_stopwords = [word[:20] for word in words_no_punct if word not in self.stopwords_set]
         # extract stems
         stems = [self.porter_stemmer.stem(word) for word in words_non_stopwords]
+        n_grams_list = _get_n_grams(stems)
+        stems = [' '.join(n_gram) for n_gram in n_grams_list]
         if is_being_fit:
             self.vocab_counter.update(stems)
         else:
@@ -121,9 +128,20 @@ class TfIdfVectoriser:
         num_samples = classification_column.size
         num_tokens = len(self.vocab_counter_reduced.items())
 
+        idf_scores = np.zeros(num_tokens)
         tf_scores = np.zeros((num_samples, num_tokens))
-        idf_scores = np.zeros((num_samples, num_tokens))
 
+
+        # calculate IDF scores
+        for term_index, term_count_tuple in enumerate(self.vocab_counter_reduced.items()):
+            term = term_count_tuple[0]
+            term_count = self.term_to_sample_count[term]
+            idf_score = math.log10((1 + num_corpus_samples) / (1 + term_count))
+            idf_scores[term_index] = idf_score
+
+
+
+        # calculate TF scores
         for sample_index in range(0, num_samples):
             if profane_only and classification_column.values[sample_index] == 0:
                 pass
@@ -135,11 +153,7 @@ class TfIdfVectoriser:
 
             for term_index, term_count_tuple in enumerate(self.vocab_counter_reduced.items()):
                 term = term_count_tuple[0]
-                term_count = self.term_to_sample_count[term]
                 tf_scores[sample_index][term_index] = math.log10(tf[term] + 1)
-                idf_scores[sample_index][term_index] = 0 \
-                    if term_count == 0 \
-                    else math.log10((1 + num_corpus_samples) / (1 + self.term_to_sample_count[term]))
 
         tf_idf_scores = tf_scores * idf_scores
         norms = np.apply_along_axis(np.linalg.norm, axis=1, arr=tf_idf_scores)
