@@ -4,9 +4,15 @@ import string
 import numpy as np
 import pandas as pd
 import sklearn.utils
+from sklearn.feature_extraction.text import TfidfVectorizer
 
+import ETL
 from TfIdfVectoriser import TfIdfVectoriser
 
+def feature_extraction_tf_idf(text):
+    vectorizer = TfidfVectorizer()
+    vectorizer.fit_transform(text)
+    return vectorizer
 
 def print_stats(epoch, false_neg, false_pos, true_neg, true_pos):
     correct_predictions = true_pos + true_neg
@@ -30,16 +36,20 @@ class SVM:
                  test_data_class_col: np.ndarray,
                  input_test_data: np.ndarray,
                  learn_rate=0.1,
-                 num_epochs=1000,
+                 num_epochs=200,
                  train_ratio=0.8):
-        np.random.shuffle(input_train_data)
-        np.random.shuffle(input_test_data)
+        # np.random.shuffle(input_train_data)
+        # np.random.shuffle(input_test_data)
         self.num_train_samples = input_train_data.shape[0]
         self.num_test_samples = input_test_data.shape[0]
 
+        ####IGNORE####
         # add the intercept term (bias) as last column, filled with 1s
-        self.train_data = np.c_[input_train_data, np.ones(self.num_train_samples)]
-        self.test_data = np.c_[input_test_data, np.ones(self.num_test_samples)]
+        # self.train_data = np.c_[input_train_data, np.ones(self.num_train_samples)]
+        # self.test_data = np.c_[input_test_data, np.ones(self.num_test_samples)]
+
+        self.train_data = input_train_data
+        self.test_data = input_test_data
         # shape should return a 2-tuple
         _, self.num_features = self.train_data.shape
         self.train_class_col = train_data_class_col
@@ -47,16 +57,17 @@ class SVM:
         self.learn_rate = learn_rate
         self.num_epochs = num_epochs
         self.c = SVM.c_param_default
+        self.b = 0
 
         self.train_ratio = train_ratio
         self.w = np.zeros(self.num_features)
 
     def _predict(self, x_i: np.ndarray):
-        cosine = np.dot(x_i, self.w)
-        return np.sign(np.dot(x_i, self.w))
+        cosine = np.dot(x_i, self.w) - self.b
+        return np.sign(cosine)
 
     def _train_predict(self, x_i_class: int, x_i: np.ndarray):
-        cosine = np.dot(x_i, self.w)
+        cosine = np.dot(x_i, self.w) - self.b
         return cosine, (x_i_class * cosine >= 1)
 
     def fit_gd(self, c_param: float = c_param_default, print_epoch_result: bool = True, wipe: bool = True):
@@ -75,6 +86,7 @@ class SVM:
             false_neg = 0
             self.learn_rate = 1 / epoch
             for index, x_i in enumerate(self.train_data):
+                x_i = np.array(x_i).ravel()
                 cosine, is_correctly_predicted = self._train_predict(samples_classes[index], x_i)
 
                 if is_correctly_predicted:
@@ -89,6 +101,7 @@ class SVM:
                     else:
                         false_pos += 1
                     self.w -= self.learn_rate * (c_param * self.w - np.dot(x_i, samples_classes[index]))
+                    self.b -= self.learn_rate * samples_classes[index]
 
             if print_epoch_result and epoch % 10 == 0:
                 print_stats(epoch, false_neg, false_pos, true_neg, true_pos)
@@ -154,10 +167,11 @@ class SVM:
                 else:
                     false_pos += 1
 
-        print_stats("TEST", true_pos, true_neg, false_pos, false_neg)
+        print_stats("TEST", false_neg, false_pos, true_neg, true_pos)
 
     def _wipe(self):
         self.w = np.zeros(self.num_features)
+        self.b = 0
 
     def iterate_c_params(self):
         for c_param in SVM.c_params:
@@ -195,12 +209,21 @@ if __name__ == '__main__':
     root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
     df = pd.read_csv('data/train.csv', header=0, skiprows=lambda i: i > 0 and random.random() > 0.075)
     train_df, test_df = split_dataframe(df, 0.8)
-    tf_idf_vectoriser = TfIdfVectoriser()
-    y_train, train_tf_idf_mat = tf_idf_vectoriser.fit_transform(train_df)
-    y_test, test_tf_idf_mat = tf_idf_vectoriser.transform(test_df)
+    train_df = ETL.clean_dataset(train_df)
+    test_df = ETL.clean_dataset(test_df)
 
-    svm = SVM(y_train, train_tf_idf_mat, y_test, test_tf_idf_mat)
-    # svm.iterate_c_params()
+    # tf_idf_vectoriser = TfIdfVectoriser()
+    # y_train, train_tf_idf = tf_idf_vectoriser.fit_transform(train_df)
+    # y_test, test_tf_idf = tf_idf_vectoriser.transform(test_df)
+
+    tf_idf_vectorizer = feature_extraction_tf_idf(train_df['clean'].values)
+    train_tf_idf = tf_idf_vectorizer.transform(train_df['clean'].values).todense()
+    test_tf_idf = tf_idf_vectorizer.transform(test_df['clean'].values).todense()
+    y_train = train_df['profanity'].to_numpy()
+    y_test = test_df['profanity'].to_numpy()
+
+    svm = SVM(y_train, train_tf_idf, y_test, test_tf_idf)
+    svm.iterate_c_params()
     svm.fit_gd(c_param=0.00001, print_epoch_result=True)
     svm.test()
 

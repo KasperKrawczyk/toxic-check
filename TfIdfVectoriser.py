@@ -91,7 +91,7 @@ class TfIdfVectoriser:
         df['tokens'].apply(lambda x: self._count_num_of_samples_with_term(x))
 
         return df['profanity'].to_numpy(), \
-               self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False, is_being_fit=True)
+               self._vectorise_tf_idf(df['profanity'], df['tokens'])
 
         # save
         # np.savetxt(self.output_root_dir_path + 'tf_idf_scores_new.csv', tf_idf_scores, delimiter=',')
@@ -112,48 +112,34 @@ class TfIdfVectoriser:
 
         # calculate the num of samples each term appears in (needed for TF-IDF)
 
-        return df['profanity'].to_numpy(), \
-               self._vectorise_tf_idf(df['profanity'], df['tokens'], profane_only=False, is_being_fit=False)
+        return df['profanity'].to_numpy(), self._vectorise_tf_idf(df['profanity'], df['tokens'])
 
     def _vectorise_tf_idf(self,
                           classification_column: pd.Series,
-                          tokens_column: pd.Series,
-                          profane_only: bool,
-                          is_being_fit: bool):
-        if is_being_fit:
-            num_corpus_samples = classification_column.size
-        else:
-            num_corpus_samples = self.num_samples
+                          tokens_column: pd.Series):
 
-        num_samples = classification_column.size
-        num_tokens = len(self.vocab_counter_reduced.items())
+        num_sample_in_dataset = classification_column.size
+        num_tokens_in_corpus = len(self.vocab_counter_reduced.items())
 
-        idf_scores = np.zeros(num_tokens)
-        tf_scores = np.zeros((num_samples, num_tokens))
-
-
-        # calculate IDF scores
-        for term_index, term_count_tuple in enumerate(self.vocab_counter_reduced.items()):
-            term = term_count_tuple[0]
-            term_count = self.term_to_sample_count[term]
-            idf_score = math.log10((1 + num_corpus_samples) / (1 + term_count))
-            idf_scores[term_index] = idf_score
-
-
+        idf_scores = self._get_idf_scores()
+        tf_scores = np.zeros((num_sample_in_dataset, num_tokens_in_corpus))
 
         # calculate TF scores
-        for sample_index in range(0, num_samples):
-            if profane_only and classification_column.values[sample_index] == 0:
-                pass
+        for sample_index in range(0, num_sample_in_dataset):
 
+            sample_tokens = tokens_column.values[sample_index]
             tf = defaultdict(int)
 
-            for token in tokens_column.values[sample_index]:
+            for token in sample_tokens:
                 tf[token] += 1
 
             for term_index, term_count_tuple in enumerate(self.vocab_counter_reduced.items()):
                 term = term_count_tuple[0]
-                tf_scores[sample_index][term_index] = math.log10(tf[term] + 1)
+                term_freq = tf[term]
+                if term_freq > 0:
+                    tf_scores[sample_index][term_index] = tf[term] / len(tokens_column.values[sample_index])
+                else:
+                    tf_scores[sample_index][term_index] = 0
 
         tf_idf_scores = tf_scores * idf_scores
         norms = np.apply_along_axis(np.linalg.norm, axis=1, arr=tf_idf_scores)
@@ -166,6 +152,20 @@ class TfIdfVectoriser:
         # tf_idf_scores = np.c_[classification_column.to_numpy(), tf_idf_scores]
 
         return tf_idf_scores
+
+    def _get_idf_scores(self):
+        num_tokens = len(self.vocab_counter_reduced.items())
+        idf_scores = np.zeros(num_tokens)
+        num_corpus_samples = self.num_samples
+
+        # calculate IDF scores
+        for term_index, term_count_tuple in enumerate(self.vocab_counter_reduced.items()):
+            term = term_count_tuple[0]
+            term_count = self.term_to_sample_count[term]
+            idf_score = (1 + math.log10((1 + num_corpus_samples) / (1 + term_count)))
+            idf_scores[term_index] = idf_score
+
+        return idf_scores
 
     def _vectorise_tf_idf_single_sample(self, tokens: list[string]):
         num_tokens = len(self.vocab_counter_reduced.items())
