@@ -9,10 +9,12 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import ETL
 from TfIdfVectoriser import TfIdfVectoriser
 
+
 def feature_extraction_tf_idf(text):
     vectorizer = TfidfVectorizer()
     vectorizer.fit_transform(text)
     return vectorizer
+
 
 def print_stats(epoch, false_neg, false_pos, true_neg, true_pos):
     correct_predictions = true_pos + true_neg
@@ -178,9 +180,9 @@ class SVM:
             self.fit_gd(c_param=c_param, print_epoch_result=True)
             self.test()
 
-    def test_new(self, vectoriser: TfIdfVectoriser, text: string):
-        vectorised_text = vectoriser.process_new(text)
-        vectorised_text = np.append(vectorised_text, [1])
+    def test_new(self, v: TfidfVectorizer, raw_text: string):
+        vectorised_text = v.transform([raw_text]).todense()
+        vectorised_text = np.array(vectorised_text).ravel()
         return self._predict(vectorised_text)
 
 
@@ -223,16 +225,10 @@ if __name__ == '__main__':
     y_test = test_df['profanity'].to_numpy()
 
     svm = SVM(y_train, train_tf_idf, y_test, test_tf_idf)
-    svm.iterate_c_params()
+    # svm.iterate_c_params()
     svm.fit_gd(c_param=0.00001, print_epoch_result=True)
-    svm.test()
+    # svm.test()
 
-
-# while True:
-    #     text = input(">>> ")
-    #     print(svm.test_new(tf_idf_vectoriser, text))
-
-    # for index, row in df.iterrows():
-    #     predict = svm.test_new(tf_idf_vectoriser, row['comment_text'])
-    #     if predict == 1:
-    #         print(row['comment_text'])
+    while True:
+        text = input(">>> ")
+        print(svm.test_new(tf_idf_vectorizer, text))
