@@ -7,12 +7,20 @@ import sklearn.utils
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 import ETL
-from TfIdfVectoriser import TfIdfVectoriser
+from TfIdfVectoriser import TfIdfVectoriser, VocabItem
+
 
 def feature_extraction_tf_idf(text):
     vectorizer = TfidfVectorizer()
     vectorizer.fit_transform(text)
     return vectorizer
+
+
+def sparse_dot_vector(sample_sparse_vector: list[(int, float)], dense_vector: np.ndarray):
+    return sum([pair[1] * dense_vector[pair[0]] for pair in sample_sparse_vector])
+
+def sparse_dot_scalar(sample_sparse_vector: list[(int, float)], scalar: float):
+    return sum([tup[1] * scalar for tup in sample_sparse_vector])
 
 def print_stats(epoch, false_neg, false_pos, true_neg, true_pos):
     correct_predictions = true_pos + true_neg
@@ -31,17 +39,19 @@ class SVM:
     c_param_default = 10 ** -5
 
     def __init__(self,
+                 vocab: dict[string: VocabItem],
                  train_data_class_col: np.ndarray,
-                 input_train_data: np.ndarray,
+                 input_train_data: dict[int: list[[int, float]]],
                  test_data_class_col: np.ndarray,
-                 input_test_data: np.ndarray,
+                 input_test_data: dict[int: list[[int, float]]],
                  learn_rate=0.1,
                  num_epochs=200,
                  train_ratio=0.8):
         # np.random.shuffle(input_train_data)
         # np.random.shuffle(input_test_data)
-        self.num_train_samples = input_train_data.shape[0]
-        self.num_test_samples = input_test_data.shape[0]
+        self.vocab = vocab
+        self.num_train_samples = len(input_train_data.items())
+        self.num_test_samples = len(input_test_data.items())
 
         ####IGNORE####
         # add the intercept term (bias) as last column, filled with 1s
@@ -51,7 +61,7 @@ class SVM:
         self.train_data = input_train_data
         self.test_data = input_test_data
         # shape should return a 2-tuple
-        _, self.num_features = self.train_data.shape
+        self.num_features = len(self.vocab.items())
         self.train_class_col = train_data_class_col
         self.test_class_col = test_data_class_col
         self.learn_rate = learn_rate
@@ -62,12 +72,12 @@ class SVM:
         self.train_ratio = train_ratio
         self.w = np.zeros(self.num_features)
 
-    def _predict(self, x_i: np.ndarray):
-        cosine = np.dot(x_i, self.w) - self.b
+    def _predict(self, x_i: list[(int, float)]):
+        cosine = sparse_dot_vector(x_i, self.w) - self.b
         return np.sign(cosine)
 
-    def _train_predict(self, x_i_class: int, x_i: np.ndarray):
-        cosine = np.dot(x_i, self.w) - self.b
+    def _train_predict(self, x_i_class: int, x_i: list[(int, float)]):
+        cosine = sparse_dot_vector(x_i, self.w) - self.b
         return cosine, (x_i_class * cosine >= 1)
 
     def fit_gd(self, c_param: float = c_param_default, print_epoch_result: bool = True, wipe: bool = True):
@@ -78,15 +88,12 @@ class SVM:
         samples_classes = np.where(self.train_class_col == 0, -1, 1)
 
         for epoch in range(1, self.num_epochs):
-            # self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes,
-            #                                                          random_state=0)
             true_pos = 0
             true_neg = 0
             false_pos = 0
             false_neg = 0
             self.learn_rate = 1 / epoch
-            for index, x_i in enumerate(self.train_data):
-                x_i = np.array(x_i).ravel()
+            for index, (i, x_i) in enumerate(self.train_data.items()):
                 cosine, is_correctly_predicted = self._train_predict(samples_classes[index], x_i)
 
                 if is_correctly_predicted:
@@ -100,52 +107,52 @@ class SVM:
                         false_neg += 1
                     else:
                         false_pos += 1
-                    self.w -= self.learn_rate * (c_param * self.w - np.dot(x_i, samples_classes[index]))
+                    self.w -= self.learn_rate * (c_param * self.w - sparse_dot_scalar(x_i, samples_classes[index]))
                     self.b -= self.learn_rate * samples_classes[index]
 
             if print_epoch_result and epoch % 10 == 0:
                 print_stats(epoch, false_neg, false_pos, true_neg, true_pos)
-
-    def fit_sgd(self, c_param: float = c_param_default, print_epoch_result: bool = True, wipe: bool = True):
-        if wipe:
-            self._wipe()
-
-        samples_classes = np.where(self.train_class_col == 0, -1, 1)
-
-        for epoch in range(1, self.num_epochs):
-            self.train_data, samples_classes = sklearn \
-                .utils \
-                .shuffle(self.train_data, samples_classes, random_state=np.random.randint(0, 42))
-            correct_predictions_per_epoch = 0
-            incorrect_predictions_per_epoch = 0
-            self.learn_rate = 1 / epoch
-            for index, x_i in enumerate(self.train_data):
-
-                cost, predicted = self.calculate_cost_sgd(samples_classes[index], x_i, c_param)
-                self.w -= (self.learn_rate * cost)
-
-                if predicted:
-                    correct_predictions_per_epoch += 1
-                else:
-                    incorrect_predictions_per_epoch += 1
-
-            if print_epoch_result and epoch % 10 == 0:
-                print('Epoch={}, incorrect predictions={}, correct predictions={}'
-                      .format(epoch, incorrect_predictions_per_epoch, correct_predictions_per_epoch))
-
-    def calculate_cost_sgd(self, x_i_class: int, x_i: np.ndarray, c_param: float):
-        margin = 1 - (x_i_class * (np.dot(x_i, self.w)))
-        weights_d = np.zeros(len(self.w))
-
-        # hinge loss function
-        if max(0, margin) == 0:
-            weights_d += self.w
-            predicted = True
-        else:
-            weights_d += self.w - (c_param * x_i_class)
-            predicted = False
-
-        return weights_d, predicted
+    #
+    # def fit_sgd(self, c_param: float = c_param_default, print_epoch_result: bool = True, wipe: bool = True):
+    #     if wipe:
+    #         self._wipe()
+    #
+    #     samples_classes = np.where(self.train_class_col == 0, -1, 1)
+    #
+    #     for epoch in range(1, self.num_epochs):
+    #         self.train_data, samples_classes = sklearn \
+    #             .utils \
+    #             .shuffle(self.train_data, samples_classes, random_state=np.random.randint(0, 42))
+    #         correct_predictions_per_epoch = 0
+    #         incorrect_predictions_per_epoch = 0
+    #         self.learn_rate = 1 / epoch
+    #         for index, x_i in enumerate(self.train_data):
+    #
+    #             cost, predicted = self.calculate_cost_sgd(samples_classes[index], x_i, c_param)
+    #             self.w -= (self.learn_rate * cost)
+    #
+    #             if predicted:
+    #                 correct_predictions_per_epoch += 1
+    #             else:
+    #                 incorrect_predictions_per_epoch += 1
+    #
+    #         if print_epoch_result and epoch % 10 == 0:
+    #             print('Epoch={}, incorrect predictions={}, correct predictions={}'
+    #                   .format(epoch, incorrect_predictions_per_epoch, correct_predictions_per_epoch))
+    #
+    # def calculate_cost_sgd(self, x_i_class: int, x_i: np.ndarray, c_param: float):
+    #     margin = 1 - (x_i_class * (np.dot(x_i, self.w)))
+    #     weights_d = np.zeros(len(self.w))
+    #
+    #     # hinge loss function
+    #     if max(0, margin) == 0:
+    #         weights_d += self.w
+    #         predicted = True
+    #     else:
+    #         weights_d += self.w - (c_param * x_i_class)
+    #         predicted = False
+    #
+    #     return weights_d, predicted
 
     def test(self):
         samples_classes = np.where(self.test_class_col == 0, -1, 1)
@@ -154,15 +161,15 @@ class SVM:
         false_pos = 0
         false_neg = 0
 
-        for i, x_i in enumerate(self.test_data):
+        for index, (i, x_i) in enumerate(self.test_data.items()):
             predicted_class = self._predict(x_i)
-            if predicted_class == samples_classes[i]:
-                if samples_classes[i] == -1:
+            if predicted_class == samples_classes[index]:
+                if samples_classes[index] == -1:
                     true_neg += 1
                 else:
                     true_pos += 1
             else:
-                if samples_classes[i] == -1:
+                if samples_classes[index] == -1:
                     false_neg += 1
                 else:
                     false_pos += 1
@@ -207,32 +214,32 @@ def split_dataframe(dataframe: pd.DataFrame, train_ratio: float):
 
 if __name__ == '__main__':
     root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
-    df = pd.read_csv('data/train.csv', header=0, skiprows=lambda i: i > 0 and random.random() > 0.075)
+    df = pd.read_csv('data/train.csv', header=0, skiprows=lambda i: i > 0 and random.random() > 0.075) # usually 0.075
     train_df, test_df = split_dataframe(df, 0.8)
     train_df = ETL.clean_dataset(train_df)
     test_df = ETL.clean_dataset(test_df)
 
-    # tf_idf_vectoriser = TfIdfVectoriser()
-    # y_train, train_tf_idf = tf_idf_vectoriser.fit_transform(train_df)
-    # y_test, test_tf_idf = tf_idf_vectoriser.transform(test_df)
+    tf_idf_vectoriser = TfIdfVectoriser()
+    y_train, train_tf_idf = tf_idf_vectoriser.fit_transform(train_df)
+    y_test, test_tf_idf = tf_idf_vectoriser.transform(test_df)
+    vocab = tf_idf_vectoriser.vocab
 
-    tf_idf_vectorizer = feature_extraction_tf_idf(train_df['clean'].values)
-    train_tf_idf = tf_idf_vectorizer.transform(train_df['clean'].values).todense()
-    test_tf_idf = tf_idf_vectorizer.transform(test_df['clean'].values).todense()
-    y_train = train_df['profanity'].to_numpy()
-    y_test = test_df['profanity'].to_numpy()
+    # tf_idf_vectorizer = feature_extraction_tf_idf(train_df['clean'].values)
+    # train_tf_idf = tf_idf_vectorizer.transform(train_df['clean'].values).todense()
+    # test_tf_idf = tf_idf_vectorizer.transform(test_df['clean'].values).todense()
+    # y_train = train_df['profanity'].to_numpy()
+    # y_test = test_df['profanity'].to_numpy()
 
-    svm = SVM(y_train, train_tf_idf, y_test, test_tf_idf)
+    svm = SVM(vocab, y_train, train_tf_idf, y_test, test_tf_idf)
     svm.iterate_c_params()
     svm.fit_gd(c_param=0.00001, print_epoch_result=True)
     svm.test()
 
-
 # while True:
-    #     text = input(">>> ")
-    #     print(svm.test_new(tf_idf_vectoriser, text))
+#     text = input(">>> ")
+#     print(svm.test_new(tf_idf_vectoriser, text))
 
-    # for index, row in df.iterrows():
-    #     predict = svm.test_new(tf_idf_vectoriser, row['comment_text'])
-    #     if predict == 1:
-    #         print(row['comment_text'])
+# for index, row in df.iterrows():
+#     predict = svm.test_new(tf_idf_vectoriser, row['comment_text'])
+#     if predict == 1:
+#         print(row['comment_text'])
