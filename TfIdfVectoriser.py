@@ -73,7 +73,7 @@ class TfIdfVectoriser:
 
     def _save_vocabulary(self, vocabulary_file_path: str):
         with open(vocabulary_file_path, 'w', encoding='utf-8') as vocab_file:
-            for stem, count in self.vocab_counter_reduced.items(): vocab_file.write(f'{stem},{count}\n')
+            for stem, vocab_item in self.vocab.items(): vocab_file.write(f'{vocab_item}\n')
 
     def fit_transform(self, df: pd.DataFrame):
         if self.has_been_fitted:
@@ -102,7 +102,7 @@ class TfIdfVectoriser:
         df['tokens'].apply(lambda x: self._count_num_of_samples_with_term(x))
 
         self._set_idf_scores()
-
+        self._save_vocabulary('data/test_vocabulary.txt')
         return df['profanity'].to_numpy(), self._vectorise_tf_idf(df['profanity'], df['tokens'])
 
         # save
@@ -115,11 +115,11 @@ class TfIdfVectoriser:
         self.vocab_counter = dict(sorted(self.vocab_counter.items()))
         if self.min_stem_occurrence == 0:
             for index, term_count_tuple in enumerate(self.vocab_counter.items()):
-                self.vocab[term_count_tuple[0]] = VocabItem(index)
+                self.vocab[term_count_tuple[0]] = VocabItem(index, term_count_tuple[1])
         else:
             for index, term_count_tuple in enumerate(self.vocab_counter):
                 if term_count_tuple[1] >= self.min_stem_occurrence:
-                    self.vocab[term_count_tuple[0]] = VocabItem(index)
+                    self.vocab[term_count_tuple[0]] = VocabItem(index, term_count_tuple[1])
 
     def transform(self, df: pd.DataFrame):
         # a sample is classified as 'profanity' if any of the other classes is non-zero
@@ -166,20 +166,19 @@ class TfIdfVectoriser:
 
         for sample_index, row in enumerate(tf_idf_scores.items()):
             pairs = row[1]
-            norm = math.sqrt(sum((pair[1] ** 2) for pair in pairs))
-            for term_index, pair in enumerate(pairs):
-                pair[1] = pair[1] / norm
+            norm = math.sqrt(sum((pow(pair[1], 2)) for pair in pairs))
+            for term_index, p in enumerate(pairs):
+                p[1] = p[1] / norm
 
         return tf_idf_scores
 
     def _set_idf_scores(self):
-        num_corpus_samples = self.num_samples
-
-        # calculate IDF scores
+        repr('calculate IDF scores')
         for term_index, vocab_tuple in enumerate(self.vocab.items()):
             term_count = vocab_tuple[1].term_to_document_count
-            idf_score = (1 + np.log10((1 + num_corpus_samples) / (1 + term_count)))
+            idf_score = (1 + np.log10((1 + self.num_samples) / (1 + term_count)))
             vocab_tuple[1].idf_score = idf_score
+
 
     def _vectorise_tf_idf_single_sample(self, tokens: list[string]):
         num_tokens = len(self.vocab.items())
@@ -221,8 +220,12 @@ class VocabItem:
     index: int
     general_count = 0
     term_to_document_count = 0
-    idf_score: float
+    idf_score = 0
 
-    def __init__(self, index: int):
+    def __init__(self, index: int, general_count: int):
         self.index = index
+        self.general_count = general_count
+
+    def __str__(self):
+        return f'{self.index},{self.general_count},{self.term_to_document_count},{self.idf_score}'
 

@@ -16,11 +16,12 @@ def feature_extraction_tf_idf(text):
     return vectorizer
 
 
-def sparse_dot_vector(sample_sparse_vector: list[(int, float)], dense_vector: np.ndarray):
+def _sparse_dot_vector(sample_sparse_vector: list[(int, float)], dense_vector: np.ndarray):
     return sum([pair[1] * dense_vector[pair[0]] for pair in sample_sparse_vector])
 
-def sparse_dot_scalar(sample_sparse_vector: list[(int, float)], scalar: float):
-    return sum([tup[1] * scalar for tup in sample_sparse_vector])
+
+
+
 
 def print_stats(epoch, false_neg, false_pos, true_neg, true_pos):
     correct_predictions = true_pos + true_neg
@@ -39,7 +40,7 @@ class SVM:
     c_param_default = 10 ** -5
 
     def __init__(self,
-                 vocab: dict[string: VocabItem],
+                 vocabulary: dict[string: VocabItem],
                  train_data_class_col: np.ndarray,
                  input_train_data: dict[int: list[[int, float]]],
                  test_data_class_col: np.ndarray,
@@ -49,7 +50,7 @@ class SVM:
                  train_ratio=0.8):
         # np.random.shuffle(input_train_data)
         # np.random.shuffle(input_test_data)
-        self.vocab = vocab
+        self.vocabulary = vocabulary
         self.num_train_samples = len(input_train_data.items())
         self.num_test_samples = len(input_test_data.items())
 
@@ -61,7 +62,7 @@ class SVM:
         self.train_data = input_train_data
         self.test_data = input_test_data
         # shape should return a 2-tuple
-        self.num_features = len(self.vocab.items())
+        self.num_features = len(self.vocabulary.items())
         self.train_class_col = train_data_class_col
         self.test_class_col = test_data_class_col
         self.learn_rate = learn_rate
@@ -72,12 +73,20 @@ class SVM:
         self.train_ratio = train_ratio
         self.w = np.zeros(self.num_features)
 
-    def _predict(self, x_i: list[(int, float)]):
-        cosine = sparse_dot_vector(x_i, self.w) - self.b
+    def _sparse_dot_scalar_to_dense(self, sample_sparse_vector: list[[int, float]], scalar: float):
+        w = np.copy(self.w)
+        d = {ind: val for [ind, val] in sample_sparse_vector}
+        for i, weight in enumerate(w):
+            w[i] = w[i] * d.get(i, 0) * scalar
+
+        return sum([tup[1] * scalar for tup in sample_sparse_vector])
+
+    def _predict(self, x_i: list[[int, float]]):
+        cosine = _sparse_dot_vector(x_i, self.w) - self.b
         return np.sign(cosine)
 
-    def _train_predict(self, x_i_class: int, x_i: list[(int, float)]):
-        cosine = sparse_dot_vector(x_i, self.w) - self.b
+    def _train_predict(self, x_i_class: int, x_i: list[[int, float]]):
+        cosine = _sparse_dot_vector(x_i, self.w) - self.b
         return cosine, (x_i_class * cosine >= 1)
 
     def fit_gd(self, c_param: float = c_param_default, print_epoch_result: bool = True, wipe: bool = True):
@@ -107,11 +116,13 @@ class SVM:
                         false_neg += 1
                     else:
                         false_pos += 1
-                    self.w -= self.learn_rate * (c_param * self.w - sparse_dot_scalar(x_i, samples_classes[index]))
+                    self.w -= self.learn_rate *\
+                              (c_param * self.w - self._sparse_dot_scalar_to_dense(x_i, samples_classes[index]))
                     self.b -= self.learn_rate * samples_classes[index]
 
             if print_epoch_result and epoch % 10 == 0:
                 print_stats(epoch, false_neg, false_pos, true_neg, true_pos)
+
     #
     # def fit_sgd(self, c_param: float = c_param_default, print_epoch_result: bool = True, wipe: bool = True):
     #     if wipe:
@@ -214,7 +225,7 @@ def split_dataframe(dataframe: pd.DataFrame, train_ratio: float):
 
 if __name__ == '__main__':
     root_path = 'C:\\Users\\kaspe\\OneDrive\\Pulpit\\test\\'
-    df = pd.read_csv('data/train.csv', header=0, skiprows=lambda i: i > 0 and random.random() > 0.075) # usually 0.075
+    df = pd.read_csv('data/train.csv', header=0, skiprows=lambda i: i > 0 and random.random() > 0.03)  # usually 0.075
     train_df, test_df = split_dataframe(df, 0.8)
     train_df = ETL.clean_dataset(train_df)
     test_df = ETL.clean_dataset(test_df)
