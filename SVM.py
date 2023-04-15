@@ -1,19 +1,10 @@
 import random
 import string
-
 import numpy as np
 import pandas as pd
 import sklearn.utils
-from sklearn.feature_extraction.text import TfidfVectorizer
-
 import ETL
 from TfIdfVectoriser import TfIdfVectoriser
-
-
-def feature_extraction_tf_idf(text):
-    vectorizer = TfidfVectorizer()
-    vectorizer.fit_transform(text)
-    return vectorizer
 
 
 def print_stats(epoch, false_neg, false_pos, true_neg, true_pos):
@@ -40,16 +31,9 @@ class SVM:
                  learn_rate=0.1,
                  num_epochs=200,
                  train_ratio=0.8):
-        # np.random.shuffle(input_train_data)
-        # np.random.shuffle(input_test_data)
+
         self.num_train_samples = input_train_data.shape[0]
         self.num_test_samples = input_test_data.shape[0]
-
-        ####IGNORE####
-        # add the intercept term (bias) as last column, filled with 1s
-        # self.train_data = np.c_[input_train_data, np.ones(self.num_train_samples)]
-        # self.test_data = np.c_[input_test_data, np.ones(self.num_test_samples)]
-
         self.train_data = input_train_data
         self.test_data = input_test_data
         # shape should return a 2-tuple
@@ -80,8 +64,6 @@ class SVM:
         samples_classes = np.where(self.train_class_col == 0, -1, 1)
 
         for epoch in range(1, self.num_epochs):
-            # self.train_data, samples_classes = sklearn.utils.shuffle(self.train_data, samples_classes,
-            #                                                          random_state=0)
             true_pos = 0
             true_neg = 0
             false_pos = 0
@@ -180,25 +162,11 @@ class SVM:
             self.fit_gd(c_param=c_param, print_epoch_result=True)
             self.test()
 
-    def test_new(self, v: TfidfVectorizer, raw_text: string):
-        vectorised_text = v.transform([raw_text]).todense()
-        vectorised_text = np.array(vectorised_text).ravel()
+    def test_new(self, v: TfIdfVectoriser, raw_text: string):
+        vectorised_text = v.process_new(raw_text)
         return self._predict(vectorised_text)
 
 
-# def svm_train_and_test(train_data: np.ndarray, test_data: np.ndarray, reg_params):
-#
-#     train_err = np.zeros(np.shape(reg_params))
-#     test_err = np.zeros(np.shape(reg_params))
-#
-#     for i in range(len(reg_params)):
-#         Ypredt, w_train = svmPredict(Xtr, Ytr, Xtr, reg_params[i])
-#         train_err[i] = calcErrorSVM(Ypredt, Ytr)
-#
-#         Ypredtr, w_pred = svmPredict(Xtr, Ytr, Xte, reg_params[i])
-#         test_err[i] = calcErrorSVM(Ypredtr, Yte)
-#
-#     return train_err, test_err
 
 def split_dataframe(dataframe: pd.DataFrame, train_ratio: float):
     repr('Returns 1. train set, 2. test set')
@@ -214,20 +182,16 @@ if __name__ == '__main__':
     train_df = ETL.clean_dataset(train_df)
     test_df = ETL.clean_dataset(test_df)
 
-    # tf_idf_vectoriser = TfIdfVectoriser()
-    # y_train, train_tf_idf = tf_idf_vectoriser.fit_transform(train_df)
-    # y_test, test_tf_idf = tf_idf_vectoriser.transform(test_df)
+    tf_idf_vectorizer = TfIdfVectoriser(min_stem_occurrence=1)
+    y_train, train_tf_idf = tf_idf_vectorizer.fit_transform(train_df)
+    y_test, test_tf_idf = tf_idf_vectorizer.transform(test_df)
 
-    tf_idf_vectorizer = feature_extraction_tf_idf(train_df['clean'].values)
-    train_tf_idf = tf_idf_vectorizer.transform(train_df['clean'].values).todense()
-    test_tf_idf = tf_idf_vectorizer.transform(test_df['clean'].values).todense()
-    y_train = train_df['profanity'].to_numpy()
-    y_test = test_df['profanity'].to_numpy()
+    np.savetxt('train_tf_idf_lib.csv', train_tf_idf, delimiter=',')
 
     svm = SVM(y_train, train_tf_idf, y_test, test_tf_idf)
     # svm.iterate_c_params()
     svm.fit_gd(c_param=0.00001, print_epoch_result=True)
-    # svm.test()
+    svm.test()
 
     while True:
         text = input(">>> ")
